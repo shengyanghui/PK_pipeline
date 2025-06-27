@@ -118,3 +118,8 @@ graph TD
 
 For new projects:
 ```
+YourProject/
+├── Input_files/
+├── data_utils.R
+├── run_pipeline.R   # source("setup.R"); source("main_step1.R"); ...
+```
