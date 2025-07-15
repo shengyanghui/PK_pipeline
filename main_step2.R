@@ -1,12 +1,9 @@
 # Step 2: Phoenix Output Processing and Summary Generation
 # ========================================================
 
-log_message("Step 2 started: Phoenix Output Processing and Summary Generation")
+# NOTE: This script expects setup.R and data_utils.R to be sourced already (i.e., run via run_pipeline.R)
 
-# Initialize environment and load packages
-source(file.path(dir.pkpipeline,"phoenix_utils.R"))
-source(file.path(dir.pkpipeline,"stats_utils.R"))
-source(file.path(dir.pkpipeline,"io_utils.R"))
+log_message("Step 2 started: Phoenix Output Processing and Summary Generation")
 
 # Process Phoenix WinNonlin output files
 phx_data <- safe_execute(
@@ -39,8 +36,56 @@ pk_param_cols <- setdiff(
 phx_data <- phx_data |>
   mutate(across(all_of(pk_param_cols), ~signif(., 3)))
 
+# Helper function to transpose phx_data for each group
+transpose_phx_data <- function(df, lookup_table, config) {
+  group_vars <- get_pp_group_vars(config, df)
+  # Identify all parameter columns (exclude Subject and group vars only)
+  all_param_cols <- setdiff(
+    names(df), 
+    c("Subject", group_vars)
+  )
+  # Identify PK parameter columns (those used in summary statistics)
+  pk_param_cols <- setdiff(
+    names(df), 
+    c("Subject", group_vars, 
+      "Dose", "Rsq_adjusted", "AUC_%Extrap_obs", "Span", "EX", "RG",
+      "Lambda_z", "Lambda_z_intercept", "Lambda_z_lower", "Lambda_z_upper", "N_Samples",
+      "Rsq", "Corr_XY", "AUMC_%Extrap_obs", "AUC_TAU_%Extrap")
+  )
+  # Order: PK parameters first, then the rest
+  other_param_cols <- setdiff(all_param_cols, pk_param_cols)
+  param_cols_ordered <- c(pk_param_cols, other_param_cols)
+  # Prepare long format
+  df_long <- df |>
+    select(Subject, all_of(group_vars), all_of(param_cols_ordered)) |>
+    mutate(across(all_of(param_cols_ordered), as.character)) |>
+    tidyr::pivot_longer(
+      cols = all_of(param_cols_ordered),
+      names_to = "Parameter",
+      values_to = "Value"
+    )
+  # Use utility to pivot wider: all group_vars + Parameter as id_cols
+  id_cols <- c(group_vars, "Parameter")
+  df_wide <- transpose_wide_by_subject(
+    df_long,
+    id_cols = id_cols,
+    subject_col = "Subject",
+    value_col = "Value"
+  )
+  # Add Unit column by matching Parameter to lookup_table
+  df_wide$Unit <- match_parameter_units(df_wide$Parameter, lookup_table)
+  df_wide <- dplyr::relocate(df_wide, Unit, .after = "Parameter")
+  # Arrange columns: group_vars, Parameter, Unit, then all Subject columns (in order)
+  subject_cols <- setdiff(names(df_wide), c(group_vars, "Parameter", "Unit"))
+  df_wide <- df_wide[, c(group_vars, "Parameter", "Unit", subject_cols)] |>
+    arrange(across(all_of(group_vars)))
+  return(df_wide)
+}
+
 # Split data by grouping variable for multi-sheet Excel output using centralized function
 phx_data_list <- split_data_for_output(phx_data, config, "pp")
+# Transpose each item in phx_data_list
+phx_data_list <- lapply(phx_data_list, transpose_phx_data, lookup_table = lt, config = config)
 pp_summary_list <- split_data_for_output(df_pp_summary, config, "pp")
 
 # Write Phoenix parameter outputs using centralized function

@@ -1,11 +1,7 @@
 # plot_pc_data.R
 # Plot cleaned PC data from Step 1 output using ggplot2 and save to PDF
 
-# Load required packages and utilities
-source(file.path(dir.pkpipeline, "setup.R"))
-
-# Source config to get output_prefix_pc
-source("data_utils.R")
+# NOTE: This script expects setup.R and data_utils.R to be sourced already (i.e., run via run_pipeline.R)
 
 # Construct the expected cleaned PC data file path
 default_output_dir <- "Output_files/Step_1/"
@@ -70,6 +66,7 @@ if (use_facet_grid) {
 # Create base plot
 p <- data |>
   ggplot() +
+  geom_point(aes(x = Time, y = Concentration, color = factor(subject_index))) +
   geom_line(aes(x = Time, y = Concentration, group = Subject, color = factor(subject_index))) +
   scale_y_log10() +
   scale_color_brewer(palette = "Set3") +  # Use Set3 palette (up to 12 colors)
