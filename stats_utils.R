@@ -3,6 +3,99 @@
 #
 # NOTE: This script expects setup.R to be sourced already (i.e., run via run_pipeline.R)
 
+#' Generic summary statistics (arithmetic and geometric)
+#' @param data Data frame
+#' @param value_col Name of value column (string)
+#' @param group_vars Character vector of grouping variables
+#' @param handle_zeros How to handle zeros for geometric stats ('exclude' or 'adjust')
+#' @param digits Rounding digits (default 2)
+#' @param rounding_fn Rounding function (default: round)
+summarize_stats_generic <- function(data, value_col, group_vars, handle_zeros = "exclude", digits = 2, rounding_fn = round) {
+  data <- data |>
+    mutate(
+      value = .data[[value_col]],
+      value_adj = case_when(
+        handle_zeros == "adjust" & value == 0 ~ value + 1e-6,
+        handle_zeros == "exclude" & value == 0 ~ NA_real_,
+        TRUE ~ value
+      )
+    )
+  # Always compute arithmetic summary for all groups with at least one non-NA value
+  arith_data <- data |>
+    group_by(across(all_of(group_vars))) |>
+    filter(any(!is.na(value))) |>
+    ungroup()
+  arith_summary <- arith_data |>
+    group_by(across(all_of(group_vars))) |>
+    summarise(
+      N = sum(!is.na(value)),
+      Mean = mean(value, na.rm = TRUE),
+      SD = sd(value, na.rm = TRUE),
+      Min = min(value, na.rm = TRUE),
+      Median = median(value, na.rm = TRUE),
+      Max = max(value, na.rm = TRUE),
+      CV = (SD / Mean * 100),
+      .groups = "drop"
+    ) |>
+    mutate(across(where(is.numeric), ~ rounding_fn(., digits)))
+
+  # For geometric stats, only compute for groups with at least one non-NA and all non-negative value_adj
+  if (handle_zeros == "exclude") {
+    geom_data <- data |>
+      group_by(across(all_of(group_vars))) |>
+      filter(any(!is.na(value_adj)) && all(value_adj[!is.na(value_adj)] >= 0)) |>
+      ungroup()
+  } else {
+    geom_data <- data |>
+      group_by(across(all_of(group_vars))) |>
+      filter(any(!is.na(value_adj))) |>
+      ungroup()
+  }
+  if (nrow(geom_data) > 0) {
+    geom_summary <- geom_data |>
+      group_by(across(all_of(group_vars))) |>
+      summarise(
+        Geo.Mean = exp(mean(log(value_adj), na.rm = TRUE)),
+        Geo.SD = exp(sd(log(value_adj), na.rm = TRUE)),
+        Geo.CV = (sqrt(exp(var(log(value_adj), na.rm = TRUE)) - 1) * 100),
+        .groups = "drop"
+      ) |>
+      mutate(across(where(is.numeric), ~ rounding_fn(., digits)))
+  } else {
+    geom_summary <- arith_summary |>
+      mutate(Geo.Mean = NA, Geo.SD = NA, Geo.CV = NA) |>
+      select(all_of(group_vars), Geo.Mean, Geo.SD, Geo.CV) |> filter(FALSE)
+  }
+
+  # Log filtered-out groups for geometric stats (only for handle_zeros == 'exclude')
+  if (handle_zeros == "exclude") {
+    # Find groups in arith_summary not in geom_summary
+    missing_geom <- dplyr::anti_join(arith_summary, geom_summary, by = group_vars)
+    if (nrow(missing_geom) > 0) {
+      for (i in seq_len(nrow(missing_geom))) {
+        group_info <- as.list(missing_geom[i, group_vars, drop=FALSE])
+        # Find the original data for this group
+        group_data <- dplyr::semi_join(data, missing_geom[i, group_vars, drop=FALSE], by = group_vars)
+        reason <- NULL
+        if (all(is.na(group_data$value_adj))) {
+          reason <- "all values are NA"
+        } else if (any(group_data$value_adj[!is.na(group_data$value_adj)] < 0)) {
+          reason <- "contains negative values"
+        }
+        log_message(sprintf(
+          "Filtered out group for geometric stats: %s (reason: %s)",
+          paste(sprintf("%s=%s", names(group_info), group_info), collapse=", "),
+          reason
+        ))
+      }
+    }
+  }
+
+  # Left join geometric stats to arithmetic stats
+  summary <- dplyr::left_join(arith_summary, geom_summary, by = group_vars)
+  return(summary)
+}
+
 #' Generate PC Summary
 #'
 #' Generates summary statistics for cleaned PC data, including geometric statistics.
@@ -16,6 +109,9 @@ generate_PC_summary <- function(cleaned_data, config) {
   bloq_value   <- config$bloq_value
   handle_bloq  <- config$handle_bloq  # e.g., "0" or "NA"
   handle_zeros <- config$handle_zero  # "exclude" or "adjust"
+  digits <- if (!is.null(config$summary_digits)) config$summary_digits else 2
+  rounding_method <- if (!is.null(config$summary_rounding_method)) config$summary_rounding_method else "round"
+  rounding_fn <- if (rounding_method == "signif") signif else round
   # Get grouping variables from config
   if (!("pc_nontime_group_vars" %in% names(config) && "pc_time_group_vars" %in% names(config))) {
     stop("You must specify both pc_nontime_group_vars and pc_time_group_vars in config.")
@@ -36,7 +132,8 @@ generate_PC_summary <- function(cleaned_data, config) {
     value_col = "Concentration",
     group_vars = group_vars,
     handle_zeros = handle_zeros,
-    digits = 2
+    digits = digits,
+    rounding_fn = rounding_fn
   )
   return(summary_stats)
 }
@@ -69,6 +166,9 @@ generate_PP_summary <- function(phx_data, config, lookup_table) {
         across(any_of(ex_affected_params), ~ if_else(EX == "Fail", NA_real_, .))
       )
   }
+  digits <- if (!is.null(config$summary_digits)) config$summary_digits else 3
+  rounding_method <- if (!is.null(config$summary_rounding_method)) config$summary_rounding_method else "round"
+  rounding_fn <- if (rounding_method == "signif") signif else round
   phx_long <- phx_data |>
     tidyr::pivot_longer(
       cols = all_of(param_cols_ordered),
@@ -83,7 +183,8 @@ generate_PP_summary <- function(phx_data, config, lookup_table) {
     value_col = "Value",
     group_vars = c(group_vars, "Parameter", "Unit"),
     handle_zeros = "exclude",
-    digits = 3
+    digits = digits,
+    rounding_fn = rounding_fn
   )
   # Drop geometric columns from arithmetic summary to avoid .x/.y duplicates
   phx_summary <- phx_summary %>% select(-Geo.Mean, -Geo.SD, -Geo.CV)
@@ -93,7 +194,8 @@ generate_PP_summary <- function(phx_data, config, lookup_table) {
     value_col = "Value",
     group_vars = c(group_vars, "Parameter", "Unit"),
     handle_zeros = config$handle_zero,
-    digits = 3
+    digits = digits,
+    rounding_fn = rounding_fn
   ) |>
     select(-N, -Mean, -SD, -Min, -Median, -Max, -CV) # keep only geometric columns
   # Merge

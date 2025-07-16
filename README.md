@@ -32,13 +32,18 @@ A modular R pipeline for pharmacokinetic (PK) data: raw data cleaning, Phoenix W
 ## Data & Configuration
 
 - **All configuration is handled in `data_utils.R`.**
-  - File paths, column mappings, grouping variables, BLOQ/zero handling, and diagnostic criteria are set here.
+  - File paths, column mappings, grouping variables, BLOQ/zero handling, summary digits, rounding method, and diagnostic criteria are set here.
   - Review and update the config list for each analysis.
+  - **New:**
+    - `summary_digits`: Number of digits for summary statistics (applies to both arithmetic and geometric stats, and to parameter outputs).
+    - `summary_rounding_method`: Rounding method for summary statistics (`"round"` or `"signif"`).
 - **Required columns:** `Subject`, `Time`, `Concentration`, `Cohort` (or mapped equivalents)
 - **Grouping variables:**  
-  - PC data: `pc_time_group_vars`, `pc_nontime_group_vars`
-  - Phoenix parameters: `pp_group_vars`
+  - Plasma concentration (PC) data: `pc_time_group_vars`, `pc_nontime_group_vars`
+  - Pharmacokinetic parameters: `pp_group_vars`
 - **Summary table:** Optional. If enabled, must contain `Subject`, `Time`, `Concentration` (and grouping variables). Controlled by `import_summary_table` in config.
+- **Non-numeric parameter list:**
+  - The file `misc/non_numeric_parameters.txt` contains a list of parameter names (one per line, e.g., `EX`, `RG`) that should always be treated as non-numeric in output. You can edit this file to add or remove parameters as needed.
 - **Config options:**  
   Set in `data_utils.R` (see in-file comments for details)
   - `import_summary_table`: Set to `FALSE` to skip importing the summary table and pulling CXX/Cmax/CXX columns in the Phoenix step. Only the main Phoenix output will be processed.
@@ -47,10 +52,15 @@ A modular R pipeline for pharmacokinetic (PK) data: raw data cleaning, Phoenix W
 
 - **Step 1 (PC Data):**  
   - `Output_files/Step_1/`: Cleaned CSV, wide-format Excel, summary Excel, BLOQ0 CSV
-- **Step 2 (Phoenix Parameters):**  
+- **Step 2 (Pharmacokinetic Parameters):**  
   - `Output_files/Step_2/`: Individual values Excel, summary Excel (with units), CXX and Cmax/CXX columns (if `import_summary_table = TRUE`)
+  - **EX and RG rows always appear first** in parameter output sheets.
+  - **Conditional formatting:** In Excel outputs, cells with value `Pass` in EX or RG rows are colored green, and `Fail` are colored red (font color only).
+  - **Non-numeric parameters:** Any parameter listed in `misc/non_numeric_parameters.txt` is never rounded and is displayed as-is in the output.
+  - **Summary statistics:** Arithmetic stats are always shown for all groups; geometric stats only if valid (blank otherwise)
 - **Logging:**  
   - `Output_files/log/`: Timestamped log files
+  - **Filtered-out groups for geometric stats** are logged with the reason (all NA or contains negative values).
 
 ## File Structure
 
@@ -64,9 +74,11 @@ Pk_pipeline/
 ├── clean_data.R          # Data cleaning functions
 ├── phoenix_utils.R       # Phoenix output processing
 ├── stats_utils.R         # Statistical analysis
-├── io_utils.R            # Input/output utilities
+├── io_utils.R            # Input/output utilities (Excel/CSV writing, conditional formatting)
 ├── plot_pc_data.R        # Plotting script
-├── misc/                 # Supporting files (e.g., column lookup)
+├── misc/                 # Supporting files
+│   ├── Column_name_lookup_table_ver2.csv  # Column name mapping for Phoenix output
+│   └── non_numeric_parameters.txt         # List of non-numeric parameters (e.g., EX, RG)
 ├── Output_files/
 │   ├── Step_1/           # Step 1 outputs
 │   ├── Step_2/           # Step 2 outputs
@@ -116,6 +128,19 @@ graph TD
   - `RG` flag: Rsq_adjusted < threshold (excludes select parameters)
   - `EX` flag: AUC%Extrap_obs > threshold (excludes select parameters)
 - **Summary table import:** Controlled by `import_summary_table` in config. If `FALSE`, summary table is not read and CXX/Cmax/CXX columns are not generated in Step 2.
+- **Non-numeric parameter handling:**
+  - The list in `misc/non_numeric_parameters.txt` controls which parameters are never rounded and are displayed as-is in Excel outputs. This is especially important for diagnostic flags like EX and RG.
+- **Excel output formatting:**
+  - Conditional formatting is applied to EX and RG rows: `Pass` is green, `Fail` is red (font color only).
+  - EX and RG always appear first in parameter output sheets.
+- **Summary statistics:**
+  - Arithmetic stats are always shown for all groups; geometric stats are only shown if valid (all non-negative, at least one non-NA); otherwise, geometric columns are blank.
+- **Logging:**
+  - Filtered-out groups for geometric stats are logged with the reason (all NA or contains negative values).
+
+> **Tip:**
+> To customize which parameters are treated as non-numeric (e.g., for new diagnostic flags), simply edit `misc/non_numeric_parameters.txt`.
+> You can also adjust the Excel formatting logic in `io_utils.R` if you want to highlight other values or parameters.
 
 ## Troubleshooting
 

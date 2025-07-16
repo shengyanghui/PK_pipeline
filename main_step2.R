@@ -24,18 +24,6 @@ df_pp_summary <- safe_execute(
   "Failed to generate PP summary"
 )
 
-# Round all PK parameters to 3 significant digits
-# Identify PK parameter columns (exclude grouping variables, Subject, and diagnostic columns)
-pk_param_cols <- setdiff(
-  names(phx_data), 
-  c("Subject", get_pp_group_vars(config, phx_data), 
-  "Dose", "Rsq_adjusted", "AUC_%Extrap_obs", "Span", "EX", "RG")
-)
-
-# Round PK parameters to 3 significant digits
-phx_data <- phx_data |>
-  mutate(across(all_of(pk_param_cols), ~signif(., 3)))
-
 # Helper function to transpose phx_data for each group
 transpose_phx_data <- function(df, lookup_table, config) {
   group_vars <- get_pp_group_vars(config, df)
@@ -86,7 +74,53 @@ transpose_phx_data <- function(df, lookup_table, config) {
 phx_data_list <- split_data_for_output(phx_data, config, "pp")
 # Transpose each item in phx_data_list
 phx_data_list <- lapply(phx_data_list, transpose_phx_data, lookup_table = lt, config = config)
+
+# Read non-numeric parameter list from file
+non_numeric_param_file <- file.path("misc", "non_numeric_parameters.txt")
+if (file.exists(non_numeric_param_file)) {
+  non_numeric_params <- trimws(readLines(non_numeric_param_file))
+} else {
+  non_numeric_params <- c("EX", "RG")
+}
+
+# Apply rounding to phx_data_list just before output, using config
+phx_digits <- if (!is.null(config$summary_digits)) config$summary_digits else 3
+phx_rounding_method <- if (!is.null(config$summary_rounding_method)) config$summary_rounding_method else "round"
+phx_rounding_fn <- if (phx_rounding_method == "signif") signif else round
+phx_data_list <- lapply(phx_data_list, function(df) {
+  subject_cols <- setdiff(names(df), c(get_pp_group_vars(config, df), "Parameter", "Unit"))
+  # Apply rounding only to rows where Parameter is not in non_numeric_params
+  df[subject_cols] <- t(apply(df, 1, function(row) {
+    if (row["Parameter"] %in% non_numeric_params) {
+      row[subject_cols]
+    } else {
+      suppressWarnings(as.character(phx_rounding_fn(as.numeric(row[subject_cols]), phx_digits)))
+    }
+  }))
+  return(df)
+})
+# After rounding, reorder rows so EX and RG are always first
+phx_data_list <- lapply(phx_data_list, function(df) {
+  if ("Parameter" %in% names(df)) {
+    ex_rows <- which(df$Parameter == "EX")
+    rg_rows <- which(df$Parameter == "RG")
+    other_rows <- setdiff(seq_len(nrow(df)), c(ex_rows, rg_rows))
+    df <- df[c(ex_rows, rg_rows, other_rows), , drop = FALSE]
+  }
+  df
+})
 pp_summary_list <- split_data_for_output(df_pp_summary, config, "pp")
+
+# Sort each summary sheet by all grouping variables and then Parameter if multiple grouping variables exist
+pp_group_vars <- get_pp_group_vars(config, df_pp_summary)
+if (length(pp_group_vars) > 1) {
+  pp_summary_list <- lapply(
+    pp_summary_list,
+    function(df) {
+      arrange(df, across(all_of(pp_group_vars)))
+    }
+  )
+}
 
 # Write Phoenix parameter outputs using centralized function
 write_standardized_excel(
