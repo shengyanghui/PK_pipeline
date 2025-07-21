@@ -55,12 +55,12 @@ process_phoenix_output <- function(phoenix_file, summary_table_file, config) {
   if (length(missing_vars) == length(group_vars)) {
     if (isTRUE(config$single_group_dataset_pp)) {
       data_rows[[group_vars]] <- 'default_group'
-      message(paste0("All PP grouping variables missing. Added '", group_vars, "' column with value 'default_group'."))
+      log_message(paste0("All PP grouping variables missing. Added '", group_vars, "' column with value 'default_group'."), "INFO")
     } else {
       stop("All PP grouping variables are missing in the data and single_group_dataset_pp is FALSE. Please check your PP data or configuration.")
     }
   } else if (length(missing_vars) > 0) {
-    warning("Missing PP grouping variables in data: ", paste(missing_vars, collapse = ", "))
+    log_message(paste("Missing PP grouping variables in data:", paste(missing_vars, collapse = ", ")), "WARNING")
   }
   
   # Process Phoenix data
@@ -96,6 +96,7 @@ process_phoenix_output <- function(phoenix_file, summary_table_file, config) {
     if (length(missing_vars_summary) == length(group_vars)) {
       if (isTRUE(config$single_group_dataset_pp)) {
         summary_data_rows[[group_vars]] <- 'default_group'
+        log_message(paste0("All PP grouping variables missing in summary table. Added '", group_vars, "' column with value 'default_group'."), "INFO")
       }
     }
 

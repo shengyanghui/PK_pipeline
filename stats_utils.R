@@ -1,6 +1,99 @@
-# Source setup.R to ensure utility functions are available
-if (exists("dir.pkpipeline")) {
-  source(file.path(dir.pkpipeline, "setup.R"))
+# stats_utils.R
+# Statistical analysis utilities for PK pipeline
+#
+# NOTE: This script expects setup.R to be sourced already (i.e., run via run_pipeline.R)
+
+#' Generic summary statistics (arithmetic and geometric)
+#' @param data Data frame
+#' @param value_col Name of value column (string)
+#' @param group_vars Character vector of grouping variables
+#' @param handle_zeros How to handle zeros for geometric stats ('exclude' or 'adjust')
+#' @param digits Rounding digits (default 2)
+#' @param rounding_fn Rounding function (default: round)
+summarize_stats_generic <- function(data, value_col, group_vars, handle_zeros = "exclude", digits = 2, rounding_fn = round) {
+  data <- data |>
+    mutate(
+      value = .data[[value_col]],
+      value_adj = case_when(
+        handle_zeros == "adjust" & value == 0 ~ value + 1e-6,
+        handle_zeros == "exclude" & value == 0 ~ NA_real_,
+        TRUE ~ value
+      )
+    )
+  # Always compute arithmetic summary for all groups with at least one non-NA value
+  arith_data <- data |>
+    group_by(across(all_of(group_vars))) |>
+    filter(any(!is.na(value))) |>
+    ungroup()
+  arith_summary <- arith_data |>
+    group_by(across(all_of(group_vars))) |>
+    summarise(
+      N = sum(!is.na(value)),
+      Mean = mean(value, na.rm = TRUE),
+      SD = sd(value, na.rm = TRUE),
+      Min = min(value, na.rm = TRUE),
+      Median = median(value, na.rm = TRUE),
+      Max = max(value, na.rm = TRUE),
+      CV = (SD / Mean * 100),
+      .groups = "drop"
+    ) |>
+    mutate(across(where(is.numeric), ~ rounding_fn(., digits)))
+
+  # For geometric stats, only compute for groups with at least one non-NA and all non-negative value_adj
+  if (handle_zeros == "exclude") {
+    geom_data <- data |>
+      group_by(across(all_of(group_vars))) |>
+      filter(any(!is.na(value_adj)) && all(value_adj[!is.na(value_adj)] >= 0)) |>
+      ungroup()
+  } else {
+    geom_data <- data |>
+      group_by(across(all_of(group_vars))) |>
+      filter(any(!is.na(value_adj))) |>
+      ungroup()
+  }
+  if (nrow(geom_data) > 0) {
+    geom_summary <- geom_data |>
+      group_by(across(all_of(group_vars))) |>
+      summarise(
+        Geo.Mean = exp(mean(log(value_adj), na.rm = TRUE)),
+        Geo.SD = exp(sd(log(value_adj), na.rm = TRUE)),
+        Geo.CV = (sqrt(exp(var(log(value_adj), na.rm = TRUE)) - 1) * 100),
+        .groups = "drop"
+      ) |>
+      mutate(across(where(is.numeric), ~ rounding_fn(., digits)))
+  } else {
+    geom_summary <- arith_summary |>
+      mutate(Geo.Mean = NA, Geo.SD = NA, Geo.CV = NA) |>
+      select(all_of(group_vars), Geo.Mean, Geo.SD, Geo.CV) |> filter(FALSE)
+  }
+
+  # Log filtered-out groups for geometric stats (only for handle_zeros == 'exclude')
+  if (handle_zeros == "exclude") {
+    # Find groups in arith_summary not in geom_summary
+    missing_geom <- dplyr::anti_join(arith_summary, geom_summary, by = group_vars)
+    if (nrow(missing_geom) > 0) {
+      for (i in seq_len(nrow(missing_geom))) {
+        group_info <- as.list(missing_geom[i, group_vars, drop=FALSE])
+        # Find the original data for this group
+        group_data <- dplyr::semi_join(data, missing_geom[i, group_vars, drop=FALSE], by = group_vars)
+        reason <- NULL
+        if (all(is.na(group_data$value_adj))) {
+          reason <- "all values are NA"
+        } else if (any(group_data$value_adj[!is.na(group_data$value_adj)] < 0)) {
+          reason <- "contains negative values"
+        }
+        log_message(sprintf(
+          "Filtered out group for geometric stats: %s (reason: %s)",
+          paste(sprintf("%s=%s", names(group_info), group_info), collapse=", "),
+          reason
+        ))
+      }
+    }
+  }
+
+  # Left join geometric stats to arithmetic stats
+  summary <- dplyr::left_join(arith_summary, geom_summary, by = group_vars)
+  return(summary)
 }
 
 #' Generate PC Summary
@@ -12,56 +105,36 @@ if (exists("dir.pkpipeline")) {
 #' @export
 generate_PC_summary <- function(cleaned_data, config) {
   stopifnot(is.data.frame(cleaned_data), is.list(config))
-  
   # Extract configuration settings
   bloq_value   <- config$bloq_value
   handle_bloq  <- config$handle_bloq  # e.g., "0" or "NA"
   handle_zeros <- config$handle_zero  # "exclude" or "adjust"
-  
+  digits <- if (!is.null(config$summary_digits)) config$summary_digits else 2
+  rounding_method <- if (!is.null(config$summary_rounding_method)) config$summary_rounding_method else "round"
+  rounding_fn <- if (rounding_method == "signif") signif else round
   # Get grouping variables from config
   if (!("pc_nontime_group_vars" %in% names(config) && "pc_time_group_vars" %in% names(config))) {
     stop("You must specify both pc_nontime_group_vars and pc_time_group_vars in config.")
   }
   group_vars <- c(config$pc_nontime_group_vars, config$pc_time_group_vars)
-  
   # Ensure all required grouping variables exist in the data
   missing_vars <- setdiff(group_vars, names(cleaned_data))
   if (length(missing_vars) > 0) {
     stop("Missing grouping variables in data: ", paste(missing_vars, collapse = ", "))
   }
-  
   # Replace BLOQ values with user-specified value (0 or NA)
   cleaned_data <- cleaned_data |>
     mutate(Concentration = ifelse(Concentration == bloq_value, handle_bloq, Concentration)) |>
     mutate(Concentration = as.numeric(Concentration))
-  
-  # Prepare adjusted concentration for geometric stats
-  cleaned_data <- cleaned_data |>
-    mutate(Conc_adj = case_when(handle_zeros == "adjust" & Concentration == 0 ~ Concentration + 1e-6,
-                                handle_zeros == "exclude"& Concentration == 0 ~ NA_real_,
-                                TRUE ~ Concentration))
-  
-  # Summarize data by user-defined grouping variables
-  summary_stats <- cleaned_data |>
-    group_by(across(all_of(group_vars))) |>
-    summarise(
-      # Arithmetic statistics (always include zeros)
-      N        = sum(!is.na(Concentration)),
-      Mean     = mean(Concentration, na.rm = TRUE)|>round(digits = 2),
-      SD       = sd(Concentration, na.rm = TRUE)|>round(digits = 2),
-      Min      = min(Concentration, na.rm = TRUE),
-      Median   = median(Concentration, na.rm = TRUE),
-      Max      = max(Concentration, na.rm = TRUE),
-      `CV (%)` = (SD / Mean * 100)|>round(digits = 2),
-      
-      # Geometric statistics (adjusted as needed, na.rm handles zeros)
-      Geo.Mean   = exp(mean(log(Conc_adj), na.rm = TRUE))|>round(digits = 2),
-      Geo.SD     = exp(sd(log(Conc_adj), na.rm = TRUE))|>round(digits = 2),
-      `Geo.CV (%)` = (sqrt(exp(var(log(Conc_adj), na.rm = TRUE)) - 1) * 100)|>round(digits = 2),
-      
-      .groups = "drop"
-    )
-  
+  # Use generic summary utility
+  summary_stats <- summarize_stats_generic(
+    cleaned_data,
+    value_col = "Concentration",
+    group_vars = group_vars,
+    handle_zeros = handle_zeros,
+    digits = digits,
+    rounding_fn = rounding_fn
+  )
   return(summary_stats)
 }
 
@@ -74,100 +147,61 @@ generate_PC_summary <- function(cleaned_data, config) {
 #' @return Data frame of summary statistics with a 'Unit' column for each parameter
 generate_PP_summary <- function(phx_data, config, lookup_table) {
   stopifnot(is.data.frame(phx_data), is.list(config))
-  
-  # Get grouping variables using centralized function for consistency
   group_vars <- get_pp_group_vars(config, phx_data)
-  
-  # Ensure all required grouping variables exist in the data
   missing_vars <- setdiff(group_vars, names(phx_data))
   if (length(missing_vars) > 0) {
-    stop("Missing grouping variables in data: ",
-         paste(missing_vars, collapse = ", "))
+    stop("Missing grouping variables in data: ", paste(missing_vars, collapse = ", "))
   }
-  
-  # Exclude grouping variables, Subject, and priority columns from parameter columns
-  # Subject, grouping vars, and diagnostic parameters are not included in summary stats
   exclude_cols <- c("Subject", group_vars, "Dose","Rsq_adjusted", "AUC_%Extrap_obs", "Span", "EX", "RG",
-                    "Lambda_z", "Lambda_z_intercept", "Lambda_z_lower", "Lambda_z_upper")
+                    "Lambda_z", "Lambda_z_intercept", "Lambda_z_lower", "Lambda_z_upper","N_Samples",
+                    "Rsq", "Corr_XY","AUMC_%Extrap_obs", "AUC_TAU_%Extrap")
   param_cols <- base::setdiff(names(phx_data), exclude_cols)
-  
-  # Get parameter columns in the same order as they appear in phx_data
   param_cols_ordered <- param_cols[order(match(param_cols, names(phx_data)))]
-  
-  # Apply diagnostic exclusion criteria filtering if enabled
   if (isTRUE(config$apply_diagnostic_criteria)) {
-    # Define parameters affected by each criterion
-    rg_affected_params <- c("Half_life", "AUC_inf_obs", "AUC_inf_obs/Dose", "Vd_obs/F", "CL_obs/F")
-    ex_affected_params <- c("AUC_inf_obs", "AUC_inf_obs/Dose", "Vd_obs/F", "CL_obs/F")
-    
-    # Filter out parameters based on diagnostic criteria
+    rg_affected_params <- c("Half_life", "AUC_inf_obs", "AUC_inf_obs/Dose", "Vd_obs/F", "CL_obs/F", "MRT_inf_obs", "AUMC_inf_obs")
+    ex_affected_params <- c("AUC_inf_obs", "AUC_inf_obs/Dose", "Vd_obs/F", "CL_obs/F", "MRT_inf_obs", "AUMC_inf_obs")
     phx_data <- phx_data |>
       mutate(
-        # RG = Fail excludes Half_life, AUC_inf_obs, AUC_inf_obs/Dose, Vd_obs/F, CL_obs/F
-        across(
-          any_of(rg_affected_params),
-          ~ if_else(RG == "Fail", NA_real_, .)
-        ),
-        # EX = Fail excludes AUC_inf_obs, AUC_inf_obs/Dose, Vd_obs/F, CL_obs/F
-        across(
-          any_of(ex_affected_params),
-          ~ if_else(EX == "Fail", NA_real_, .)
-        )
+        across(any_of(rg_affected_params), ~ if_else(RG == "Fail", NA_real_, .)),
+        across(any_of(ex_affected_params), ~ if_else(EX == "Fail", NA_real_, .))
       )
   }
-  
-  # Always create a Unit column for each parameter using the lookup table
+  digits <- if (!is.null(config$summary_digits)) config$summary_digits else 3
+  rounding_method <- if (!is.null(config$summary_rounding_method)) config$summary_rounding_method else "round"
+  rounding_fn <- if (rounding_method == "signif") signif else round
   phx_long <- phx_data |>
     tidyr::pivot_longer(
       cols = all_of(param_cols_ordered),
       names_to = "Parameter",
       values_to = "Value"
-    ) |>
-    dplyr::left_join(lookup_table[, c("Preferred", "Unit")], by = c("Parameter" = "Preferred"))
-  
-  # Create factor for Parameter to maintain the order from phx_data
+    )
+  phx_long$Unit <- match_parameter_units(as.character(phx_long$Parameter), lookup_table)
   phx_long$Parameter <- factor(phx_long$Parameter, levels = param_cols_ordered)
-  
-  phx_summary <- phx_long |>
-    group_by(across(all_of(c(
-      group_vars, "Parameter", "Unit"
-    )))) |>
-    summarise(
-      N = sum(!is.na(Value)),
-      Mean = if(N > 0) mean(Value, na.rm = TRUE) |> signif(3) else NA_real_,
-      SD = if(N > 1) sd(Value, na.rm = TRUE) |> signif(3) else NA_real_,
-      Min = if(N > 0) min(Value, na.rm = TRUE) |> signif(3) else NA_real_,
-      Median = if(N > 0) median(Value, na.rm = TRUE) |> signif(3) else NA_real_,
-      Max = if(N > 0) max(Value, na.rm = TRUE) |> signif(3) else NA_real_,
-      CV = if(N > 0 && !is.na(Mean) && Mean != 0) (SD / Mean * 100) |> signif(3) else NA_real_,
-      .groups = "drop"
-    )
-  
-  geo_stats <- phx_long |>
-    mutate(
-      Value_adj = case_when(
-        config$handle_zero == "adjust" & Value == 0 ~ Value + 1e-6,
-        config$handle_zero == "exclude" & Value == 0 ~ NA_real_,
-        TRUE ~ Value
-      )
-    ) |>
-    filter(!is.na(Value_adj), Value_adj > 0) |>
-    group_by(across(all_of(c(
-      group_vars, "Parameter", "Unit"
-    )))) |>
-    summarise(
-      N_geo = n(),
-      Geo.Mean = if(N_geo > 0) exp(mean(log(Value_adj), na.rm = TRUE)) |> signif(3) else NA_real_,
-      Geo.CV = if(N_geo > 1) (sqrt(exp(var(log(Value_adj), na.rm = TRUE)) - 1) * 100) |> signif(3) else NA_real_,
-      .groups = "drop"
-    )
-  
+  # Use generic summary utility for arithmetic stats
+  phx_summary <- summarize_stats_generic(
+    phx_long,
+    value_col = "Value",
+    group_vars = c(group_vars, "Parameter", "Unit"),
+    handle_zeros = "exclude",
+    digits = digits,
+    rounding_fn = rounding_fn
+  )
+  # Drop geometric columns from arithmetic summary to avoid .x/.y duplicates
+  phx_summary <- phx_summary %>% select(-Geo.Mean, -Geo.SD, -Geo.CV)
+  # Use generic summary utility for geometric stats (with zero-handling from config)
+  geo_stats <- summarize_stats_generic(
+    phx_long,
+    value_col = "Value",
+    group_vars = c(group_vars, "Parameter", "Unit"),
+    handle_zeros = config$handle_zero,
+    digits = digits,
+    rounding_fn = rounding_fn
+  ) |>
+    select(-N, -Mean, -SD, -Min, -Median, -Max, -CV) # keep only geometric columns
+  # Merge
   full_summary <- full_join(phx_summary, geo_stats, by = c(group_vars, "Parameter", "Unit")) |>
     arrange(Parameter)
-  
-  # Convert Parameter back to character to avoid factor issues in output
   full_summary$Parameter <- as.character(full_summary$Parameter)
-  
   return(full_summary)
 }
 

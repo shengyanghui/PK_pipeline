@@ -93,7 +93,13 @@ config <- list(
   single_group_dataset_pp = FALSE,
   
   # Whether to import summary table and pull concentration data in Phoenix step
-  import_summary_table = TRUE
+  import_summary_table = TRUE,
+  
+  # Number of digits for summary statistics (user-configurable)
+  summary_digits = 3,  # e.g., 2 or 3
+
+  # Rounding method for summary statistics: 'round' or 'signif' (user-configurable)
+  summary_rounding_method = "round"
 )
 
 # specify path for pipeline code ====

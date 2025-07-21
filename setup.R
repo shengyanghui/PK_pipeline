@@ -8,7 +8,7 @@ library(openxlsx)  # Excel I/O
 if (requireNamespace("ggplot2", quietly = TRUE)) {
   library(ggplot2)  # Load ggplot2 if available
 } else {
-  warning("Package 'ggplot2' not found. Plotting functionality will not be available.")
+  log_message("Package 'ggplot2' not found. Plotting functionality will not be available.", "WARNING")
 }
 if (!requireNamespace("fs", quietly = TRUE)) {
   stop("Package 'fs' is required for directory creation.")
@@ -261,4 +261,90 @@ initialize_pipeline <- function(config) {
   log_message("Pipeline environment initialized successfully")
   return(TRUE)
 }
+
+#' Match parameter names to units using a lookup table
+#' @param parameters Character vector of parameter names
+#' @param lookup_table Data frame with columns 'Preferred' and 'Unit'
+#' @return Character vector of units (same order as parameters)
+match_parameter_units <- function(parameters, lookup_table) {
+  # Ensure lookup_table has correct columns
+  stopifnot(all(c("Preferred", "Unit") %in% names(lookup_table)))
+  units <- lookup_table$Unit[match(parameters, lookup_table$Preferred)]
+  # Replace NA with empty string for unmatched parameters
+  units[is.na(units)] <- ""
+  return(units)
+}
+
+#' Get id_cols for pivot_wider for PC data
+#' @param config Configuration list
+#' @param data Cleaned PC data frame
+#' @return Character vector of id_cols for pivot_wider
+get_pc_id_cols <- function(config, data) {
+  split_var <- get_split_var(config, data, "pc")
+  non_time_group_vars <- setdiff(config$pc_nontime_group_vars, split_var)
+  id_cols <- c(non_time_group_vars, config$pc_time_group_vars)
+  return(id_cols)
+}
+
+#' Transpose data to wide format by subject
+#' @param df Data frame
+#' @param id_cols Character vector of id columns (grouping variables)
+#' @param subject_col Name of the subject column
+#' @param value_col Name of the value column
+#' @param arrange_cols Optional: columns to arrange by after pivoting
+#' @return Wide-format data frame (one column per subject)
+transpose_wide_by_subject <- function(df, id_cols, subject_col, value_col, arrange_cols = NULL) {
+  wide_df <- df |>
+    tidyr::pivot_wider(
+      id_cols = all_of(id_cols),
+      names_from = {{subject_col}},
+      values_from = {{value_col}}
+    )
+  if (!is.null(arrange_cols)) {
+    wide_df <- wide_df |> dplyr::arrange(across(all_of(arrange_cols)))
+  }
+  return(wide_df)
+}
+
+#' Generic summary statistics (arithmetic and geometric)
+#' @param data Data frame
+#' @param value_col Name of value column (string)
+#' @param group_vars Character vector of grouping variables
+#' @param handle_zeros How to handle zeros for geometric stats ('exclude' or 'adjust')
+#' @param digits Rounding digits (default 2)
+#' @return Data frame of summary statistics
+summarize_stats_generic <- function(data, value_col, group_vars, handle_zeros = "exclude", digits = 2) {
+  data <- data |>
+    mutate(
+      value = .data[[value_col]],
+      value_adj = case_when(
+        handle_zeros == "adjust" & value == 0 ~ value + 1e-6,
+        handle_zeros == "exclude" & value == 0 ~ NA_real_,
+        TRUE ~ value
+      )
+    )
+  summary <- data |>
+    group_by(across(all_of(group_vars))) |>
+    summarise(
+      N = sum(!is.na(value)),
+      Mean = mean(value, na.rm = TRUE),
+      SD = sd(value, na.rm = TRUE),
+      Min = min(value, na.rm = TRUE),
+      Median = median(value, na.rm = TRUE),
+      Max = max(value, na.rm = TRUE),
+      CV = (SD / Mean * 100),
+      Geo.Mean = exp(mean(log(value_adj), na.rm = TRUE)),
+      Geo.SD = exp(sd(log(value_adj), na.rm = TRUE)),
+      Geo.CV = (sqrt(exp(var(log(value_adj), na.rm = TRUE)) - 1) * 100),
+      .groups = "drop"
+    ) |>
+    mutate(across(where(is.numeric), ~ round(., digits)))
+  return(summary)
+}
+
+# Source all utility scripts so their functions are available globally
+source(file.path(dir.pkpipeline, "clean_data.R"))
+source(file.path(dir.pkpipeline, "phoenix_utils.R"))
+source(file.path(dir.pkpipeline, "stats_utils.R"))
+source(file.path(dir.pkpipeline, "io_utils.R"))
 
