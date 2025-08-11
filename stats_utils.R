@@ -36,8 +36,20 @@ summarize_stats_generic <- function(data, value_col, group_vars, handle_zeros = 
       Max = max(value, na.rm = TRUE),
       CV = (SD / Mean * 100),
       .groups = "drop"
-    ) |>
-    mutate(across(where(is.numeric), ~ rounding_fn(., digits)))
+    )
+
+  # Apply rounding with special handling for Tmax
+  if ("Parameter" %in% group_vars) {
+    # Apply different rounding for Tmax vs other parameters
+    arith_summary <- arith_summary |>
+      mutate(
+        across(where(is.numeric), ~ ifelse(grepl("Tmax", Parameter, ignore.case = TRUE), round(., 3), rounding_fn(., digits)))
+      )
+  } else {
+    # Apply standard rounding when no Parameter column
+    arith_summary <- arith_summary |>
+      mutate(across(where(is.numeric), ~ rounding_fn(., digits)))
+  }
 
   # For geometric stats, only compute for groups with at least one non-NA and all non-negative value_adj
   if (handle_zeros == "exclude") {
@@ -59,8 +71,20 @@ summarize_stats_generic <- function(data, value_col, group_vars, handle_zeros = 
         Geo.SD = exp(sd(log(value_adj), na.rm = TRUE)),
         Geo.CV = (sqrt(exp(var(log(value_adj), na.rm = TRUE)) - 1) * 100),
         .groups = "drop"
-      ) |>
-      mutate(across(where(is.numeric), ~ rounding_fn(., digits)))
+      )
+    
+    # Apply rounding with special handling for Tmax
+    if ("Parameter" %in% group_vars) {
+      # Apply different rounding for Tmax vs other parameters
+      geom_summary <- geom_summary |>
+        mutate(
+          across(where(is.numeric), ~ ifelse(grepl("Tmax", Parameter, ignore.case = TRUE), round(., 3), rounding_fn(., digits)))
+        )
+    } else {
+      # Apply standard rounding when no Parameter column
+      geom_summary <- geom_summary |>
+        mutate(across(where(is.numeric), ~ rounding_fn(., digits)))
+    }
   } else {
     geom_summary <- arith_summary |>
       mutate(Geo.Mean = NA, Geo.SD = NA, Geo.CV = NA) |>
