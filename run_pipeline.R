@@ -17,6 +17,3 @@ source(file.path(dir.pkpipeline, "plot_pc_data.R"))
 
 # 5. Step 2: Process Phoenix output and generate PP summary statistics
 source(file.path(dir.pkpipeline, "main_step2.R"))
-
-# 6. Step 3: Plot key PK parameters by grouping variable (new)
-source(file.path(dir.pkpipeline, "plot_pp_parameters.R"))

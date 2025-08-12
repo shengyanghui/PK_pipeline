@@ -306,7 +306,41 @@ transpose_wide_by_subject <- function(df, id_cols, subject_col, value_col, arran
   return(wide_df)
 }
 
-
+#' Generic summary statistics (arithmetic and geometric)
+#' @param data Data frame
+#' @param value_col Name of value column (string)
+#' @param group_vars Character vector of grouping variables
+#' @param handle_zeros How to handle zeros for geometric stats ('exclude' or 'adjust')
+#' @param digits Rounding digits (default 2)
+#' @return Data frame of summary statistics
+summarize_stats_generic <- function(data, value_col, group_vars, handle_zeros = "exclude", digits = 2) {
+  data <- data |>
+    mutate(
+      value = .data[[value_col]],
+      value_adj = case_when(
+        handle_zeros == "adjust" & value == 0 ~ value + 1e-6,
+        handle_zeros == "exclude" & value == 0 ~ NA_real_,
+        TRUE ~ value
+      )
+    )
+  summary <- data |>
+    group_by(across(all_of(group_vars))) |>
+    summarise(
+      N = sum(!is.na(value)),
+      Mean = mean(value, na.rm = TRUE),
+      SD = sd(value, na.rm = TRUE),
+      Min = min(value, na.rm = TRUE),
+      Median = median(value, na.rm = TRUE),
+      Max = max(value, na.rm = TRUE),
+      CV = (SD / Mean * 100),
+      Geo.Mean = exp(mean(log(value_adj), na.rm = TRUE)),
+      Geo.SD = exp(sd(log(value_adj), na.rm = TRUE)),
+      Geo.CV = (sqrt(exp(var(log(value_adj), na.rm = TRUE)) - 1) * 100),
+      .groups = "drop"
+    ) |>
+    mutate(across(where(is.numeric), ~ round(., digits)))
+  return(summary)
+}
 
 # Source all utility scripts so their functions are available globally
 source(file.path(dir.pkpipeline, "clean_data.R"))

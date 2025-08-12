@@ -91,7 +91,7 @@ phx_data_list <- lapply(phx_data_list, function(df) {
   subject_cols <- setdiff(names(df), c(get_pp_group_vars(config, df), "Parameter", "Unit"))
   # Apply rounding only to rows where Parameter is not in non_numeric_params
   df[subject_cols] <- t(apply(df, 1, function(row) {
-    if (row["Parameter"] %in% c(non_numeric_params, "Tmax")) {
+    if (row["Parameter"] %in% non_numeric_params) {
       row[subject_cols]
     } else {
       suppressWarnings(as.character(phx_rounding_fn(as.numeric(row[subject_cols]), phx_digits)))
