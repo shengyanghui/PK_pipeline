@@ -99,7 +99,10 @@ config <- list(
   summary_digits = 3,  # e.g., 2 or 3
 
   # Rounding method for summary statistics: 'round' or 'signif' (user-configurable)
-  summary_rounding_method = "round"
+  summary_rounding_method = "round",
+
+  # List of PK parameters to plot in Step 3 (customizable)
+  pk_plot_parameters = c("Cmax", "AUC_last", "AUC_inf_obs", "Half_life")
 )
 
 # specify path for pipeline code ====
