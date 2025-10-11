@@ -106,7 +106,7 @@ config <- list(
 )
 
 # specify path for pipeline code ====
-dir.pkpipeline<-"C:/Users/yanghui.sheng/Documents/Ascletis_CodeBase/R/Pk_pipeline"
+dir.pkpipeline<-"path/to/pipeline_code"
 
 
 
