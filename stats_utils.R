@@ -38,17 +38,17 @@ summarize_stats_generic <- function(data, value_col, group_vars, handle_zeros = 
       .groups = "drop"
     )
 
-  # Apply rounding with special handling for Tmax
+  # Apply rounding with special handling for Tmax, Tlast, and Tlag
   if ("Parameter" %in% group_vars) {
     # Apply different rounding for Tmax vs other parameters
     arith_summary <- arith_summary |>
       mutate(
-        across(where(is.numeric), ~ ifelse(grepl("Tmax", Parameter, ignore.case = TRUE), round(., 3), rounding_fn(., digits)))
+        across(where(is.numeric), ~ ifelse(grepl("^T", Parameter, ignore.case = TRUE), round(., 3), rounding_fn(., digits)))
       )
   } else {
-    # Apply standard rounding when no Parameter column
+    # Apply standard rounding when no Parameter column, excluding columns named with 'Time'
     arith_summary <- arith_summary |>
-      mutate(across(where(is.numeric), ~ rounding_fn(., digits)))
+      mutate(across(where(is.numeric) & !matches("Time"), ~ rounding_fn(., digits)))
   }
 
   # For geometric stats, only compute for groups with at least one non-NA and all non-negative value_adj
@@ -68,8 +68,8 @@ summarize_stats_generic <- function(data, value_col, group_vars, handle_zeros = 
       group_by(across(all_of(group_vars))) |>
       summarise(
         Geo.Mean = exp(mean(log(value_adj), na.rm = TRUE)),
-        Geo.SD = exp(sd(log(value_adj), na.rm = TRUE)),
         Geo.CV = (sqrt(exp(var(log(value_adj), na.rm = TRUE)) - 1) * 100),
+        Geo.SD = exp(sd(log(value_adj), na.rm = TRUE)),
         .groups = "drop"
       )
     
@@ -78,12 +78,12 @@ summarize_stats_generic <- function(data, value_col, group_vars, handle_zeros = 
       # Apply different rounding for Tmax vs other parameters
       geom_summary <- geom_summary |>
         mutate(
-          across(where(is.numeric), ~ ifelse(grepl("Tmax", Parameter, ignore.case = TRUE), round(., 3), rounding_fn(., digits)))
+          across(where(is.numeric), ~ ifelse(grepl("^T", Parameter, ignore.case = TRUE), round(., 3), rounding_fn(., digits)))
         )
     } else {
-      # Apply standard rounding when no Parameter column
+      # Apply standard rounding when no Parameter column, excluding columns named with 'Time'
       geom_summary <- geom_summary |>
-        mutate(across(where(is.numeric), ~ rounding_fn(., digits)))
+        mutate(across(where(is.numeric) & !matches("Time"), ~ rounding_fn(., digits)))
     }
   } else {
     geom_summary <- arith_summary |>
