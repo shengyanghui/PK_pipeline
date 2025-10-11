@@ -1,13 +1,47 @@
 # plot_pc_data.R
 # Plot cleaned PC data from Step 1 output using ggplot2 and save to PDF
+# Creates both linear and log scale plots
 
 # NOTE: This script expects setup.R and data_utils.R to be sourced already (i.e., run via run_pipeline.R)
+
+# Function to create PK concentration plot
+create_pk_plot <- function(data, use_log_scale = TRUE, facet_row_var = NULL, facet_col_var = NULL, facet_var = NULL, use_facet_grid = TRUE) {
+  # Create base plot
+  p <- data |>
+    ggplot() +
+    geom_point(aes(x = Time, y = Concentration, color = factor(subject_index))) +
+    geom_line(aes(x = Time, y = Concentration, group = Subject, color = factor(subject_index))) +
+    scale_color_brewer(palette = "Set3") +  # Use Set3 palette (up to 12 colors)
+    theme_dark() +  # Use dark background for better Set3 contrast
+    guides(color = "none") # Remove the legend
+  
+  # Add y-axis scale
+  if (use_log_scale) {
+    p <- p + scale_y_log10()
+  }
+  
+  # Add appropriate faceting and labels
+  if (use_facet_grid) {
+    p <- p + facet_grid(as.formula(paste(facet_row_var, "~", facet_col_var))) +
+      labs(title = paste("PK Concentration vs. Time by", facet_row_var, "and", facet_col_var),
+           y = ifelse(use_log_scale, "Concentration (log10)", "Concentration"),
+           x = "Time (h)")
+  } else {
+    p <- p + facet_wrap(as.formula(paste("~", facet_var)), ncol = 3) +
+      labs(title = paste("PK Concentration vs. Time by", facet_var),
+           y = ifelse(use_log_scale, "Concentration (log10)", "Concentration"),
+           x = "Time (h)")
+  }
+  
+  return(p)
+}
 
 # Construct the expected cleaned PC data file path
 default_output_dir <- "Output_files/Step_1/"
 file_date <- format(Sys.Date(), "%Y%m%d")
 cleaned_file <- generate_output_path(config$output_prefix_pc, default_output_dir)
-pdf_file <- file.path(default_output_dir, paste0(config$output_prefix_pc, "_", file_date, ".pdf"))
+pdf_file_log <- file.path(default_output_dir, paste0(config$output_prefix_pc, "_log_", file_date, ".pdf"))
+pdf_file_linear <- file.path(default_output_dir, paste0(config$output_prefix_pc, "_linear_", file_date, ".pdf"))
 
 safe_execute(check_file_exists(cleaned_file, "Cleaned PC data file"), "Cleaned PC data file not found")
 
@@ -63,32 +97,21 @@ if (use_facet_grid) {
     ungroup()
 }
 
-# Create base plot
-p <- data |>
-  ggplot() +
-  geom_point(aes(x = Time, y = Concentration, color = factor(subject_index))) +
-  geom_line(aes(x = Time, y = Concentration, group = Subject, color = factor(subject_index))) +
-  scale_y_log10() +
-  scale_color_brewer(palette = "Set3") +  # Use Set3 palette (up to 12 colors)
-  theme_dark() +  # Use dark background for better Set3 contrast
-  guides(color = "none") # Remove the legend
+# Create log scale plot
+p_log <- create_pk_plot(data, use_log_scale = TRUE, facet_row_var, facet_col_var, facet_var, use_facet_grid)
 
-# Add appropriate faceting
-if (use_facet_grid) {
-  p <- p + facet_grid(as.formula(paste(facet_row_var, "~", facet_col_var))) +
-    labs(title = paste("PK Concentration vs. Time by", facet_row_var, "and", facet_col_var),
-         y = "Concentration (log10)",
-         x = "Time (h)")
-} else {
-  p <- p + facet_wrap(as.formula(paste("~", facet_var)), ncol = 3) +
-    labs(title = paste("PK Concentration vs. Time by", facet_var),
-         y = "Concentration (log10)",
-         x = "Time (h)")
-}
+# Create linear scale plot
+p_linear <- create_pk_plot(data, use_log_scale = FALSE, facet_row_var, facet_col_var, facet_var, use_facet_grid)
 
-# Save plot to PDF
-pdf(pdf_file, width = 10, height = 7)
-print(p)
+# Save log scale plot to PDF
+pdf(pdf_file_log, width = 10, height = 7)
+print(p_log)
 dev.off()
 
-log_message(paste("Plot saved to:", pdf_file), "INFO") 
+# Save linear scale plot to PDF
+pdf(pdf_file_linear, width = 10, height = 7)
+print(p_linear)
+dev.off()
+
+log_message(paste("Log scale plot saved to:", pdf_file_log), "INFO")
+log_message(paste("Linear scale plot saved to:", pdf_file_linear), "INFO") 

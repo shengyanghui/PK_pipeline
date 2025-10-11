@@ -110,16 +110,16 @@ for (param in plot_parameters) {
     unit_val <- ""
   }
   ylab_str <- if (nzchar(unit_val)) paste0(param, " (", unit_val, ")") else param
-  p <- ggplot(df_param, aes_string(x = group_vars[1], y = "Value")) +
+  p <- ggplot(df_param, aes(x = !!sym(group_vars[1]), y = Value)) +
     geom_jitter(width = 0.2, height = 0, size = 2, alpha = 0.7, color = "blue") +
-    geom_boxplot(aes_string(group = group_vars[1]), outlier.shape = NA, alpha = 0.3, fill = NA) +
+    geom_boxplot(aes(group = !!sym(group_vars[1])), outlier.shape = NA, alpha = 0.3, fill = NA) +
     labs(title = paste(param, "by", group_vars[1]),
          x = group_vars[1],
          y = ylab_str) +
     theme_bw()
   # If a second grouping variable exists, use as shape
   if (length(group_vars) >= 2) {
-    p <- p + aes_string(shape = group_vars[2]) +
+    p <- p + aes(shape = !!sym(group_vars[2])) +
       labs(shape = group_vars[2])
   }
   # Check for long x-axis labels and adjust angle/margin if needed
