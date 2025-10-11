@@ -6,6 +6,7 @@ A modular R pipeline for pharmacokinetic (PK) data: raw data cleaning, Phoenix W
 - Clean and map raw PK concentration data
 - Process Phoenix WinNonlin outputs and (optionally) summary tables
 - Generate arithmetic and geometric summary statistics
+- Visualize the distributions of key PK parameters using boxplots
 - Apply diagnostic exclusion criteria (Rsq, AUC%Extrap)
 - Export results to Excel/CSV (multi-sheet)
 - Comprehensive logging
@@ -85,62 +86,6 @@ Pk_pipeline/
 │   └── log/              # Log files
 └── Input_files/          # Raw data files
 ```
-
-## Project Architecture & Dependency Map
-
-```mermaid
-graph TD
-  A[run_pipeline.R] --> B[setup.R]
-  A --> C[data_utils.R]
-  A --> D[main_step1.R]
-  A --> E[plot_pc_data.R]
-  A --> F[main_step2.R]
-  B -->|Defines config, logging, utilities| D
-  B -->|Defines config, logging, utilities| F
-  D --> G[clean_data.R]
-  D --> H[stats_utils.R]
-  D --> I[io_utils.R]
-  F --> J[phoenix_utils.R]
-  F --> H
-  F --> I
-  E --> H
-  E -->|Optional: ggplot2| H
-```
-
-> **Note:**
-> All utility scripts (`clean_data.R`, `phoenix_utils.R`, `stats_utils.R`, `io_utils.R`) are sourced by `setup.R` and are available globally. Step scripts (`main_step1.R`, `main_step2.R`, `plot_pc_data.R`) do **not** source any utility/config scripts themselves; they only use the functions made available by `setup.R`. The arrows from step scripts to utility scripts represent usage (function calls), not direct sourcing.
-
-## Key Implementation Details
-
-- **Centralized utility functions** are used for:
-  - Output writing (`write_excel_outputs`, `write_csv_output`, `write_standardized_excel`)
-  - Unit row generation (`generate_unit_row`)
-  - Parameter-to-unit matching (`match_parameter_units`)
-  - Data splitting and wide-format transposition (`split_data_for_output`, `transpose_wide_by_subject`)
-  - Summary statistics (`summarize_stats_generic`)
-- **No duplicated logic** for unit row or parameter-unit matching; all scripts use the utilities.
-- **BLOQ/zero handling:**
-  - In Step 1, BLOQ values before the first measurable concentration are set to 0.
-  - If **all** concentrations in a group are BLOQ, **all are set to 0** (not NA).
-- **Grouping variable handling** is robust for any number of variables, using `!!!rlang::syms()` for grouping and arranging.
-- **Time points:** Set `summary_time_points` in config to extract CXX and Cmax/CXX columns (only if `import_summary_table = TRUE`)
-- **Exclusion criteria:**  
-  - `RG` flag: Rsq_adjusted < threshold (excludes select parameters)
-  - `EX` flag: AUC%Extrap_obs > threshold (excludes select parameters)
-- **Summary table import:** Controlled by `import_summary_table` in config. If `FALSE`, summary table is not read and CXX/Cmax/CXX columns are not generated in Step 2.
-- **Non-numeric parameter handling:**
-  - The list in `misc/non_numeric_parameters.txt` controls which parameters are never rounded and are displayed as-is in Excel outputs. This is especially important for diagnostic flags like EX and RG.
-- **Excel output formatting:**
-  - Conditional formatting is applied to EX and RG rows: `Pass` is green, `Fail` is red (font color only).
-  - EX and RG always appear first in parameter output sheets.
-- **Summary statistics:**
-  - Arithmetic stats are always shown for all groups; geometric stats are only shown if valid (all non-negative, at least one non-NA); otherwise, geometric columns are blank.
-- **Logging:**
-  - Filtered-out groups for geometric stats are logged with the reason (all NA or contains negative values).
-
-> **Tip:**
-> To customize which parameters are treated as non-numeric (e.g., for new diagnostic flags), simply edit `misc/non_numeric_parameters.txt`.
-> You can also adjust the Excel formatting logic in `io_utils.R` if you want to highlight other values or parameters.
 
 ## Troubleshooting
 
