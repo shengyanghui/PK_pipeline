@@ -35,13 +35,16 @@ A modular R pipeline for pharmacokinetic (PK) data: raw data cleaning, Phoenix W
 - **All configuration is handled in `data_utils.R`.**
   - File paths, column mappings, grouping variables, BLOQ/zero handling, summary digits, rounding method, and diagnostic criteria are set here.
   - Review and update the config list for each analysis.
-  - **New:**
+  - **New simplified approach:**
+    - Use `primary_group_var` and `primary_time_var` for main grouping variables (auto-detected from column_map if NULL)
+    - Add `additional_time_vars` and `additional_group_vars` for extra grouping variables
+    - Legacy variables (`pc_time_group_vars`, `pc_nontime_group_vars`, `pp_group_vars`) are auto-generated for backward compatibility
     - `summary_digits`: Number of digits for summary statistics (applies to both arithmetic and geometric stats, and to parameter outputs).
     - `summary_rounding_method`: Rounding method for summary statistics (`"round"` or `"signif"`).
 - **Required columns:** `Subject`, `Time`, `Concentration`, `Cohort` (or mapped equivalents)
 - **Grouping variables:**  
-  - Plasma concentration (PC) data: `pc_time_group_vars`, `pc_nontime_group_vars`
-  - Pharmacokinetic parameters: `pp_group_vars`
+  - **Simplified approach (recommended):** Use `primary_group_var` + `additional_group_vars` and `primary_time_var` + `additional_time_vars`
+  - **Legacy approach:** `pc_time_group_vars`, `pc_nontime_group_vars` for PC data; `pp_group_vars` for PP data
 - **Summary table:** Optional. If enabled, must contain `Subject`, `Time`, `Concentration` (and grouping variables). Controlled by `import_summary_table` in config.
 - **Non-numeric parameter list:**
   - The file `misc/non_numeric_parameters.txt` contains a list of parameter names (one per line, e.g., `EX`, `RG`) that should always be treated as non-numeric in output. You can edit this file to add or remove parameters as needed.
@@ -117,14 +120,16 @@ Pk_pipeline/
 │   ├── safe_execute()               # Standardized error handling
 │   ├── split_data_for_output()      # Data splitting for Excel output
 │   ├── write_standardized_excel()   # Standardized Excel output
-│   ├── get_pc_group_vars()          # Defensive grouping for PC data
-│   ├── get_pp_group_vars()          # Defensive grouping for PP data
+│   ├── get_pc_group_vars()          # Defensive grouping for PC data (enhanced with simplified config support)
+│   ├── get_pp_group_vars()          # Defensive grouping for PP data (enhanced with simplified config support)
+│   ├── get_pc_time_group_vars()     # Time grouping variables for PC data (NEW)
 │   ├── get_split_var()              # Primary split variable
 │   ├── validate_config()            # Config validation
 │   ├── initialize_pipeline()        # Pipeline environment setup
 │   ├── match_parameter_units()      # Parameter-to-unit matching
 │   ├── get_pc_id_cols()             # id_cols for PC pivot_wider
 │   ├── transpose_wide_by_subject()  # Wide-format by subject
+│   ├── transpose_phx_data()         # Transpose Phoenix data for each group (MOVED from main_step2.R)
 │   ├── summarize_stats_generic()    # Generic summary stats
 │   └── (sources all utility scripts)
 ├── clean_data.R
@@ -146,5 +151,7 @@ Pk_pipeline/
 ├── plot_pc_data.R
 │   └── (pipeline logic only; no new functions)
 ├── data_utils.R
-│   └── config (list)                # All analysis configuration
+│   ├── config (list)                # All analysis configuration (restructured with simplified approach)
+│   ├── derive_primary_vars()        # Auto-detect primary grouping variables from column_map (NEW)
+│   └── auto_generate_legacy_vars()  # Generate legacy variables for backward compatibility (NEW)
 ```
