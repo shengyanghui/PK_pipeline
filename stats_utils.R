@@ -197,14 +197,14 @@ generate_PP_summary <- function(phx_data, config, lookup_table) {
     tidyr::pivot_longer(
       cols = all_of(param_cols_ordered),
       names_to = "Parameter",
-      values_to = "Value"
+      values_to = "Estimate"
     )
   phx_long$Unit <- match_parameter_units(as.character(phx_long$Parameter), lookup_table)
   phx_long$Parameter <- factor(phx_long$Parameter, levels = param_cols_ordered)
   # Use generic summary utility for arithmetic stats
   phx_summary <- summarize_stats_generic(
     phx_long,
-    value_col = "Value",
+    value_col = "Estimate",
     group_vars = c(group_vars, "Parameter", "Unit"),
     handle_zeros = "exclude",
     digits = digits,
@@ -215,7 +215,7 @@ generate_PP_summary <- function(phx_data, config, lookup_table) {
   # Use generic summary utility for geometric stats (with zero-handling from config)
   geo_stats <- summarize_stats_generic(
     phx_long,
-    value_col = "Value",
+    value_col = "Estimate",
     group_vars = c(group_vars, "Parameter", "Unit"),
     handle_zeros = config$handle_zero,
     digits = digits,
