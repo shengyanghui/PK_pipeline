@@ -35,7 +35,7 @@ pp_long <- phx_data |>
   tidyr::pivot_longer(
     cols = all_of(param_cols),
     names_to = "Parameter",
-    values_to = "Value"
+    values_to = "Estimate"
   )
 
 # Filter for selected PK parameters (from config)
@@ -47,8 +47,8 @@ for (g in group_vars) {
   if (g %in% names(pp_long)) pp_long[[g]] <- as.factor(pp_long[[g]])
 }
 
-# Convert Value to numeric (suppress warnings for non-numeric rows)
-pp_long$Value <- suppressWarnings(as.numeric(pp_long$Value))
+# Convert Estimate to numeric (suppress warnings for non-numeric rows)
+pp_long$Estimate <- suppressWarnings(as.numeric(pp_long$Estimate))
 
 # Apply EX and RG diagnostic filter before plotting, only if columns exist in pp_long
 rg_affected_params <- c("Half_life", "AUC_inf_obs", "AUC_inf_obs/Dose", "Vd_obs/F", "CL_obs/F", "MRT_inf_obs", "AUMC_inf_obs")
@@ -60,7 +60,7 @@ has_RG <- "RG" %in% names(pp_long)
 removed_rows <- data.frame()
 
 if (has_EX || has_RG) {
-  # Apply filter: set Value to NA if fails EX or RG for affected parameters
+  # Apply filter: set Estimate to NA if fails EX or RG for affected parameters
   pp_long <- pp_long |>
     dplyr::rowwise() |>
     dplyr::mutate(
@@ -69,7 +69,7 @@ if (has_EX || has_RG) {
         Parameter %in% ex_affected_params & has_EX & EX == "Fail" ~ "EX",
         TRUE ~ NA_character_
       ),
-      Value = ifelse(!is.na(removed_reason), NA, Value)
+      Estimate = ifelse(!is.na(removed_reason), NA, Estimate)
     ) |>
     dplyr::ungroup()
 
@@ -96,8 +96,50 @@ pdf_file <- file.path(default_output_dir, paste0(config$output_prefix_pp, "_PK_p
 # Plot for each parameter
 if (length(plot_parameters) == 0) stop("No PK parameters specified for plotting.")
 
-# Open PDF device
-pdf(pdf_file, width = 10, height = 7)
+# Calculate adaptive PDF dimensions based on number of facets
+if (length(group_vars) >= 2) {
+  # Count unique values in the second grouping variable for faceting
+  n_facets <- length(unique(pp_long[[group_vars[2]]]))
+  
+  # Calculate optimal dimensions
+  # Base dimensions for single plot
+  base_width <- 7
+  base_height <- 6
+  
+  # Adaptive scaling based on number of facets
+  if (n_facets <= 2) {
+    # 1-2 facets: arrange horizontally
+    pdf_width <- base_width * n_facets
+    pdf_height <- base_height
+  } else if (n_facets <= 4) {
+    # 3-4 facets: 2x2 grid
+    pdf_width <- base_width * 2
+    pdf_height <- base_height * 2
+  } else if (n_facets <= 6) {
+    # 5-6 facets: 3x2 grid
+    pdf_width <- base_width * 3
+    pdf_height <- base_height * 2
+  } else if (n_facets <= 9) {
+    # 7-9 facets: 3x3 grid
+    pdf_width <- base_width * 3
+    pdf_height <- base_height * 3
+  } else {
+    # 10+ facets: 4x3 grid (maximum reasonable size)
+    pdf_width <- base_width * 4
+    pdf_height <- base_height * 3
+  }
+  
+  log_message(sprintf("Using adaptive PDF dimensions: %.1f x %.1f inches for %d facets", 
+                      pdf_width, pdf_height, n_facets), "INFO")
+} else {
+  # Single grouping variable - use standard dimensions
+  pdf_width <- 7
+  pdf_height <- 6
+  log_message("Using standard PDF dimensions: 7 x 6 inches (single grouping variable)", "INFO")
+}
+
+# Open PDF device with adaptive dimensions
+pdf(pdf_file, width = pdf_width, height = pdf_height)
 for (param in plot_parameters) {
   df_param <- pp_long |> dplyr::filter(Parameter == param)
   if (nrow(df_param) == 0) next
@@ -110,17 +152,23 @@ for (param in plot_parameters) {
     unit_val <- ""
   }
   ylab_str <- if (nzchar(unit_val)) paste0(param, " (", unit_val, ")") else param
-  p <- ggplot(df_param, aes(x = !!sym(group_vars[1]), y = Value)) +
+  
+  # Create base plot
+  p <- ggplot(df_param, aes(x = !!sym(group_vars[1]), y = Estimate)) +
     geom_jitter(width = 0.2, height = 0, size = 2, alpha = 0.7, color = "blue") +
     geom_boxplot(aes(group = !!sym(group_vars[1])), outlier.shape = NA, alpha = 0.3, fill = NA) +
     labs(title = paste(param, "by", group_vars[1]),
          x = group_vars[1],
          y = ylab_str) +
     theme_bw()
-  # If a second grouping variable exists, use as shape
+  
+  # Add faceting if second grouping variable exists
   if (length(group_vars) >= 2) {
-    p <- p + aes(shape = !!sym(group_vars[2])) +
-      labs(shape = group_vars[2])
+    p <- p + facet_wrap(as.formula(paste("~", group_vars[2])), scales = "free_y") +
+      theme(
+        panel.spacing = unit(2, "lines"),  # Increase space between facet panels
+        strip.text = element_text(size = 12)  # Ensure strip text is readable
+      )
   }
   # Check for long x-axis labels and adjust angle/margin if needed
   x_labels <- unique(as.character(df_param[[group_vars[1]]]))
