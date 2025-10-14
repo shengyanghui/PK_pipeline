@@ -132,15 +132,27 @@ write_standardized_excel <- function(data_list, file_prefix, output_dir, context
 #' @param data Data frame to check against
 #' @return Vector of present grouping variables
 get_pc_group_vars <- function(config, data) {
+  # Method 1: Use simplified configuration (RECOMMENDED)
+  # Build grouping variables from primary + additional
+  primary_var <- if (!is.null(config$primary_group_var)) config$primary_group_var else "Cohort"
+  additional_vars <- if (!is.null(config$additional_group_vars)) config$additional_group_vars else character(0)
+  all_vars <- c(primary_var, additional_vars)
+  
+  # Check which of these variables are present in the data
+  present_vars <- intersect(all_vars, names(data))
+  if (length(present_vars) > 0) {
+    return(present_vars)
+  }
+  
+  # Method 2: Legacy fallback (for backward compatibility)
   if ("pc_nontime_group_vars" %in% names(config) && length(config$pc_nontime_group_vars) > 0) {
     present_vars <- intersect(config$pc_nontime_group_vars, names(data))
     if (length(present_vars) > 0) {
       return(present_vars)
     }
   }
-  if ("Cohort" %in% names(data)) {
-    return("Cohort")
-  }
+  
+  # Method 3: Final fallback
   return("default_group")
 }
 
@@ -149,13 +161,27 @@ get_pc_group_vars <- function(config, data) {
 #' @param data Data frame to check against
 #' @return Vector of present grouping variables
 get_pp_group_vars <- function(config, data) {
-  if ("pp_group_vars" %in% names(config) && length(config$pp_group_vars) > 0 && 
-      all(config$pp_group_vars %in% names(data))) {
-    return(config$pp_group_vars)
+  # Method 1: Use simplified configuration (RECOMMENDED)
+  # Build grouping variables from primary + additional
+  primary_var <- if (!is.null(config$primary_group_var)) config$primary_group_var else "Cohort"
+  additional_vars <- if (!is.null(config$additional_group_vars)) config$additional_group_vars else character(0)
+  all_vars <- c(primary_var, additional_vars)
+  
+  # Check which of these variables are present in the data
+  present_vars <- intersect(all_vars, names(data))
+  if (length(present_vars) > 0) {
+    return(present_vars)
   }
-  if ("Cohort" %in% names(data)) {
-    return("Cohort")
+  
+  # Method 2: Legacy fallback (for backward compatibility)
+  if ("pp_group_vars" %in% names(config) && length(config$pp_group_vars) > 0) {
+    present_vars <- intersect(config$pp_group_vars, names(data))
+    if (length(present_vars) > 0) {
+      return(present_vars)
+    }
   }
+  
+  # Method 3: Final fallback
   return("default_group")
 }
 
@@ -175,6 +201,35 @@ get_split_var <- function(config, data, type = "pc") {
     return(group_vars[1])
   }
   return("default_group")
+}
+
+#' Get all time-related grouping variables for PC data
+#' @param config Configuration list
+#' @param data Data frame to check against
+#' @return Vector of present time grouping variables
+get_pc_time_group_vars <- function(config, data) {
+  # Method 1: Use simplified configuration (RECOMMENDED)
+  # Build time grouping variables from primary + additional
+  primary_var <- if (!is.null(config$primary_time_var)) config$primary_time_var else "Time"
+  additional_vars <- if (!is.null(config$additional_time_vars)) config$additional_time_vars else character(0)
+  all_vars <- c(primary_var, additional_vars)
+  
+  # Check which of these variables are present in the data
+  present_vars <- intersect(all_vars, names(data))
+  if (length(present_vars) > 0) {
+    return(present_vars)
+  }
+  
+  # Method 2: Legacy fallback (for backward compatibility)
+  if ("pc_time_group_vars" %in% names(config) && length(config$pc_time_group_vars) > 0) {
+    present_vars <- intersect(config$pc_time_group_vars, names(data))
+    if (length(present_vars) > 0) {
+      return(present_vars)
+    }
+  }
+  
+  # Method 3: Final fallback
+  return(character(0))
 }
 
 #' Generate unit row for data frame columns
@@ -304,6 +359,56 @@ transpose_wide_by_subject <- function(df, id_cols, subject_col, value_col, arran
     wide_df <- wide_df |> dplyr::arrange(across(all_of(arrange_cols)))
   }
   return(wide_df)
+}
+
+#' Transpose Phoenix data for each group
+#' @param df Data frame containing Phoenix parameters
+#' @param lookup_table Data frame with parameter unit mappings
+#' @param config Configuration list
+#' @return Wide-format data frame with parameters as rows and subjects as columns
+transpose_phx_data <- function(df, lookup_table, config) {
+  group_vars <- get_pp_group_vars(config, df)
+  # Identify all parameter columns (exclude Subject and group vars only)
+  all_param_cols <- setdiff(
+    names(df), 
+    c("Subject", group_vars)
+  )
+  # Identify PK parameter columns (those used in summary statistics)
+  pk_param_cols <- setdiff(
+    names(df), 
+    c("Subject", group_vars, 
+      "Dose", "Rsq_adjusted", "AUC_%Extrap_obs", "Span", "EX", "RG",
+      "Lambda_z", "Lambda_z_intercept", "Lambda_z_lower", "Lambda_z_upper", "N_Samples",
+      "Rsq", "Corr_XY", "AUMC_%Extrap_obs", "AUC_TAU_%Extrap")
+  )
+  # Order: PK parameters first, then the rest
+  other_param_cols <- setdiff(all_param_cols, pk_param_cols)
+  param_cols_ordered <- c(pk_param_cols, other_param_cols)
+  # Prepare long format
+  df_long <- df |>
+    select(Subject, all_of(group_vars), all_of(param_cols_ordered)) |>
+    mutate(across(all_of(param_cols_ordered), as.character)) |>
+    tidyr::pivot_longer(
+      cols = all_of(param_cols_ordered),
+      names_to = "Parameter",
+      values_to = "Estimate"
+    )
+  # Use utility to pivot wider: all group_vars + Parameter as id_cols
+  id_cols <- c(group_vars, "Parameter")
+  df_wide <- transpose_wide_by_subject(
+    df_long,
+    id_cols = id_cols,
+    subject_col = "Subject",
+    value_col = "Estimate"
+  )
+  # Add Unit column by matching Parameter to lookup_table
+  df_wide$Unit <- match_parameter_units(df_wide$Parameter, lookup_table)
+  df_wide <- dplyr::relocate(df_wide, Unit, .after = "Parameter")
+  # Arrange columns: group_vars, Parameter, Unit, then all Subject columns (in order)
+  subject_cols <- setdiff(names(df_wide), c(group_vars, "Parameter", "Unit"))
+  df_wide <- df_wide[, c(group_vars, "Parameter", "Unit", subject_cols)] |>
+    arrange(across(all_of(group_vars)))
+  return(df_wide)
 }
 
 
