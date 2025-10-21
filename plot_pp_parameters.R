@@ -4,7 +4,7 @@
 # NOTE: This script expects setup.R and data_utils.R to be sourced already (i.e., run via run_pipeline.R)
 
 # Construct the expected Phoenix parameter data file path (Step 2 output)
-default_output_dir <- "Output_files/Step_2/"
+default_output_dir <- paste0(config$output_dir,"Step_2/")
 file_date <- format(Sys.Date(), "%Y%m%d")
 # We'll regenerate the long-format data in-memory from phx_data (Step 2)
 
@@ -164,7 +164,7 @@ for (param in plot_parameters) {
   
   # Add faceting if second grouping variable exists
   if (length(group_vars) >= 2) {
-    p <- p + facet_wrap(as.formula(paste("~", group_vars[2])), scales = "free_y") +
+    p <- p + facet_wrap(as.formula(paste("~", group_vars[2])), scales = "fixed") +
       theme(
         panel.spacing = unit(2, "lines"),  # Increase space between facet panels
         strip.text = element_text(size = 12)  # Ensure strip text is readable

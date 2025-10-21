@@ -201,30 +201,15 @@ generate_PP_summary <- function(phx_data, config, lookup_table) {
     )
   phx_long$Unit <- match_parameter_units(as.character(phx_long$Parameter), lookup_table)
   phx_long$Parameter <- factor(phx_long$Parameter, levels = param_cols_ordered)
-  # Use generic summary utility for arithmetic stats
-  phx_summary <- summarize_stats_generic(
+  # Use generic summary utility for summary stats
+  full_summary <- summarize_stats_generic(
     phx_long,
     value_col = "Estimate",
     group_vars = c(group_vars, "Parameter", "Unit"),
     handle_zeros = "exclude",
     digits = digits,
     rounding_fn = rounding_fn
-  )
-  # Drop geometric columns from arithmetic summary to avoid .x/.y duplicates
-  phx_summary <- phx_summary %>% select(-Geo.Mean, -Geo.SD, -Geo.CV)
-  # Use generic summary utility for geometric stats (with zero-handling from config)
-  geo_stats <- summarize_stats_generic(
-    phx_long,
-    value_col = "Estimate",
-    group_vars = c(group_vars, "Parameter", "Unit"),
-    handle_zeros = config$handle_zero,
-    digits = digits,
-    rounding_fn = rounding_fn
-  ) |>
-    select(-N, -Mean, -SD, -Min, -Median, -Max, -CV) # keep only geometric columns
-  # Merge
-  full_summary <- full_join(phx_summary, geo_stats, by = c(group_vars, "Parameter", "Unit")) |>
-    arrange(Parameter)
+  ) |> arrange(Parameter)
   full_summary$Parameter <- as.character(full_summary$Parameter)
   return(full_summary)
 }

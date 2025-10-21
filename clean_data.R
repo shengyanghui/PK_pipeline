@@ -56,7 +56,7 @@ clean_timepoints <- function(time_col, rules) {
   stopifnot(is.vector(time_col))
   stopifnot(is.list(rules))
   for (rule in rules) {
-    time_col <- gsub(rule[1], rule[2], time_col)
+    time_col <- gsub(pattern = rule[1], replacement = rule[2], x = time_col, fixed = T)
   }
   result <- suppressWarnings(as.numeric(time_col))
   if (any(is.na(result) & !is.na(time_col))) {

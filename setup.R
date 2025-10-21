@@ -15,13 +15,13 @@ if (!requireNamespace("fs", quietly = TRUE)) {
 }
 
 # Automatically create output directories for both steps
-fs::dir_create("Output_files/Step_1", recurse = TRUE)
-fs::dir_create("Output_files/Step_2", recurse = TRUE)
-fs::dir_create("Output_files/log", recurse = TRUE)  # Create log directory
+fs::dir_create(paste0(config$output_dir,"Step_1"), recurse = TRUE)
+fs::dir_create(paste0(config$output_dir,"Step_2"), recurse = TRUE)
+fs::dir_create(paste0(config$output_dir,"log"), recurse = TRUE)  # Create log directory
 
 # Create timestamp for log file
 timestamp <- format(Sys.time(), "%Y%m%d_%H%M%S")
-log_file <- file.path("Output_files/log", paste0("pipeline_log_", timestamp, ".txt"))
+log_file <- file.path(paste0(config$output_dir,"log"), paste0("pipeline_log_", timestamp, ".txt"))
 
 # Simple logging function that writes INFO messages to both console and file
 # Warnings and messages will go to console as usual (not captured in log file)
@@ -309,9 +309,9 @@ initialize_pipeline <- function(config) {
   validate_config(config)
   
   # Create output directories
-  fs::dir_create("Output_files/Step_1", recurse = TRUE)
-  fs::dir_create("Output_files/Step_2", recurse = TRUE)
-  fs::dir_create("Output_files/log", recurse = TRUE)
+  fs::dir_create(paste0(config$output_dir,"Step_1"), recurse = TRUE)
+  fs::dir_create(paste0(config$output_dir,"Step_2"), recurse = TRUE)
+  fs::dir_create(paste0(config$output_dir,"log"), recurse = TRUE)
   
   log_message("Pipeline environment initialized successfully")
   return(TRUE)

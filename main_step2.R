@@ -81,14 +81,14 @@ if (length(pp_group_vars) > 1) {
 write_standardized_excel(
   phx_data_list,
   paste0(config$output_prefix_pp, "_parameters"),
-  "Output_files/Step_2/",
+  paste0(config$output_dir,"Step_2/"),
   "Phoenix parameter"
 )
 
 write_standardized_excel(
   pp_summary_list,
   paste0(config$output_prefix_pp, "_summary"),
-  "Output_files/Step_2/",
+  paste0(config$output_dir,"Step_2/"),
   "Phoenix summary"
 )
 

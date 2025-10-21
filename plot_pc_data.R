@@ -37,7 +37,7 @@ create_pk_plot <- function(data, use_log_scale = TRUE, facet_row_var = NULL, fac
 }
 
 # Construct the expected cleaned PC data file path
-default_output_dir <- "Output_files/Step_1/"
+default_output_dir <- paste0(config$output_dir,"Step_1")
 file_date <- format(Sys.Date(), "%Y%m%d")
 cleaned_file <- generate_output_path(config$output_prefix_pc, default_output_dir)
 pdf_file_log <- file.path(default_output_dir, paste0(config$output_prefix_pc, "_log_", file_date, ".pdf"))

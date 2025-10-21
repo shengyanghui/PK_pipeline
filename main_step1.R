@@ -51,14 +51,14 @@ data_wide_list <- cleaned_data |>
 write_standardized_excel(
   summary_stats_list,
   paste0(config$output_prefix_pc, "_summary"),
-  "Output_files/Step_1/",
+  paste0(config$output_dir,"Step_1/"),
   "summary statistics"
 )
 
 write_standardized_excel(
   data_wide_list,
   paste0(config$output_prefix_pc, "_wide"),
-  "Output_files/Step_1/",
+  paste0(config$output_dir,"Step_1/"),
   "wide-format"
 )
 
@@ -71,9 +71,9 @@ write_csv_output(
   data_cleaned_out,
   file_prefix = config$output_prefix_pc,
   unit_row = generate_unit_row(data_cleaned_out),
-  output_dir = "Output_files/Step_1/"
+  output_dir = paste0(config$output_dir,"Step_1/")
 )
-log_message("Wrote cleaned data CSV to Output_files/Step_1/")
+log_message(paste("Wrote cleaned data CSV to", paste0(config$output_dir,"Step_1/")))
 
 # ---- Set BLOQ values before first measurable concentration to 0 and output ----
 bloq_value <- config$bloq_value
@@ -105,12 +105,12 @@ data_bloq0_out <- data_bloq0 |>
 write_csv_output(
   data_bloq0_out,
   file_prefix = paste0(config$output_prefix_pc, "_BLOQ0"),
-  output_dir = "Output_files/Step_1/",
+  output_dir = paste0(config$output_dir,"Step_1/"),
   unit_row = generate_unit_row(data_bloq0_out)
 )
 log_message(paste(
   "BLOQ0-adjusted data saved to:",
-  generate_output_path(paste0(config$output_prefix_pc, "_BLOQ0"), "Output_files/Step_1/")
+  generate_output_path(paste0(config$output_prefix_pc, "_BLOQ0"), paste0(config$output_dir,"Step_1/"))
 ))
 
 log_message("Step 1 completed.")
