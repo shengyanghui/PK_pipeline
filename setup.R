@@ -415,7 +415,7 @@ transpose_phx_data <- function(df, lookup_table, config) {
 
 # Source all utility scripts so their functions are available globally
 source(file.path(dir.pkpipeline, "clean_data.R"))
-source(file.path(dir.pkpipeline, "phoenix_utils.R"))
+source(file.path(dir.pkpipeline, "phoenix_nca_utils.R"))
 source(file.path(dir.pkpipeline, "stats_utils.R"))
 source(file.path(dir.pkpipeline, "io_utils.R"))
 

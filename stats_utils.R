@@ -213,37 +213,3 @@ generate_PP_summary <- function(phx_data, config, lookup_table) {
   full_summary$Parameter <- as.character(full_summary$Parameter)
   return(full_summary)
 }
-
-#' Apply Exclusion Criteria
-#'
-#' Applies diagnostic exclusion criteria to Phoenix data and adds flag variables.
-#' @param data Data frame
-#' @param config List of configuration options
-#' @return Data frame with exclusion flags added
-apply_exclusion_criteria <- function(data, config) {
-  stopifnot(is.data.frame(data), is.list(config))
-  if (!isTRUE(config$apply_diagnostic_criteria)) {
-    return(data)
-  }
-  # Use explicit thresholds from config
-  rsq_threshold <- config$rsq_threshold
-  auc_extrap_threshold <- config$auc_extrap_threshold
-  
-  # Add Rsq_adjusted exclusion flag (EX)
-  data <- data |>
-    mutate(RG = case_when(
-      Rsq_adjusted < rsq_threshold ~ "Fail",
-      is.na(Rsq_adjusted) ~ "Fail",
-      TRUE ~ "Pass"
-    ))
-  
-  # Add AUC%Extrap_obs exclusion flag (RG)
-  data <- data |>
-    mutate(EX = case_when(
-      `AUC_%Extrap_obs` > auc_extrap_threshold ~ "Fail",
-      is.na(`AUC_%Extrap_obs`) ~ "Fail",
-      TRUE ~ "Pass"
-    ))
-  
-  return(data)
-}

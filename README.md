@@ -76,7 +76,7 @@ Pk_pipeline/
 ├── main_step2.R          # Step 2: Phoenix processing & summary
 ├── data_utils.R          # Configuration
 ├── clean_data.R          # Data cleaning functions
-├── phoenix_utils.R       # Phoenix output processing
+├── phoenix_nca_utils.R   # Phoenix NCA output processing
 ├── stats_utils.R         # Statistical analysis
 ├── io_utils.R            # Input/output utilities (Excel/CSV writing, conditional formatting)
 ├── plot_pc_data.R        # Plotting script
@@ -134,8 +134,9 @@ Pk_pipeline/
 │   └── (sources all utility scripts)
 ├── clean_data.R
 │   └── clean_pk_data()              # Clean PK data, handle grouping, BLOQ, etc.
-├── phoenix_utils.R
-│   └── process_phoenix_output()     # Read/process Phoenix output, build unit lookup
+├── phoenix_nca_utils.R
+│   ├── process_phoenix_output()     # Read/process Phoenix NCA output, build unit lookup
+│   └── apply_exclusion_criteria()   # Apply diagnostic exclusion criteria (Rsq, AUC%Extrap)
 ├── stats_utils.R
 │   ├── generate_PC_summary()        # PC summary stats (arithmetic/geometric)
 │   └── generate_PP_summary()        # PP summary stats (arithmetic/geometric)
