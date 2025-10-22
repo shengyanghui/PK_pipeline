@@ -6,7 +6,7 @@ A modular R pipeline for pharmacokinetic (PK) data: raw data cleaning, Phoenix W
 - Clean and map raw PK concentration data
 - Process Phoenix WinNonlin outputs and (optionally) summary tables
 - Generate arithmetic and geometric summary statistics
-- Visualize the distributions of key PK parameters using boxplots
+- Visualize the distributions of key PK parameters using boxplots with adaptive sizing
 - Apply diagnostic exclusion criteria (Rsq, AUC%Extrap)
 - Export results to Excel/CSV (multi-sheet)
 - Comprehensive logging
@@ -131,6 +131,7 @@ Pk_pipeline/
 │   ├── transpose_wide_by_subject()  # Wide-format by subject
 │   ├── transpose_phx_data()         # Transpose Phoenix data for each group (MOVED from main_step2.R)
 │   ├── summarize_stats_generic()    # Generic summary stats
+│   ├── calculate_plot_dimensions()  # Calculate adaptive PDF dimensions based on number of facets
 │   └── (sources all utility scripts)
 ├── clean_data.R
 │   └── clean_pk_data()              # Clean PK data, handle grouping, BLOQ, etc.

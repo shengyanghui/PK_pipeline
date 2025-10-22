@@ -411,7 +411,43 @@ transpose_phx_data <- function(df, lookup_table, config) {
   return(df_wide)
 }
 
-
+#' Calculate Adaptive Plot Dimensions
+#'
+#' Calculates optimal PDF dimensions based on the number of facets/panels.
+#' Used for both PC and PP plots to ensure proper sizing.
+#' @param n_facets Number of facets/panels in the plot
+#' @param base_width Base width for single plot (default: 7)
+#' @param base_height Base height for single plot (default: 6)
+#' @return List with width and height dimensions
+calculate_plot_dimensions <- function(n_facets, base_width = 7, base_height = 6) {
+  stopifnot(is.numeric(n_facets), n_facets > 0,
+            is.numeric(base_width), base_width > 0,
+            is.numeric(base_height), base_height > 0)
+  
+  if (n_facets <= 2) {
+    # 1-2 facets: arrange horizontally
+    pdf_width <- base_width * n_facets
+    pdf_height <- base_height
+  } else if (n_facets <= 4) {
+    # 3-4 facets: 2x2 grid
+    pdf_width <- base_width * 2
+    pdf_height <- base_height * 2
+  } else if (n_facets <= 6) {
+    # 5-6 facets: 3x2 grid
+    pdf_width <- base_width * 3
+    pdf_height <- base_height * 2
+  } else if (n_facets <= 9) {
+    # 7-9 facets: 3x3 grid
+    pdf_width <- base_width * 3
+    pdf_height <- base_height * 3
+  } else {
+    # 10+ facets: 4x3 grid (maximum reasonable size)
+    pdf_width <- base_width * 4
+    pdf_height <- base_height * 3
+  }
+  
+  return(list(width = pdf_width, height = pdf_height))
+}
 
 # Source all utility scripts so their functions are available globally
 source(file.path(dir.pkpipeline, "clean_data.R"))

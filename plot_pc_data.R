@@ -103,13 +103,34 @@ p_log <- create_pk_plot(data, use_log_scale = TRUE, facet_row_var, facet_col_var
 # Create linear scale plot
 p_linear <- create_pk_plot(data, use_log_scale = FALSE, facet_row_var, facet_col_var, facet_var, use_facet_grid)
 
+base_width <- 3
+base_height <- 2.5
+
+# Calculate adaptive PDF dimensions based on number of facets
+if (use_facet_grid) {
+  # Count unique values in the second grouping variable for faceting
+  n_facets <- length(unique(data[[facet_col_var]])) * length(unique(data[[facet_row_var]]))
+  pdf_width <- base_width * length(unique(data[[facet_col_var]]))
+  pdf_height <- base_height * length(unique(data[[facet_row_var]]))
+} else {
+  # For facet_wrap, count unique values in the single grouping variable
+  n_facets <- length(unique(data[[facet_var]]))
+  # Calculate optimal dimensions using helper function
+  plot_dims <- calculate_plot_dimensions(n_facets, base_width, base_height)
+  pdf_width <- plot_dims$width
+  pdf_height <- plot_dims$height
+}
+
+log_message(sprintf("Using adaptive PDF dimensions: %.1f x %.1f inches for %d facets", 
+                    pdf_width, pdf_height, n_facets), "INFO")
+
 # Save log scale plot to PDF
-pdf(pdf_file_log, width = 10, height = 7)
+pdf(pdf_file_log, width = pdf_width, height = pdf_height)
 print(p_log)
 dev.off()
 
 # Save linear scale plot to PDF
-pdf(pdf_file_linear, width = 10, height = 7)
+pdf(pdf_file_linear, width = pdf_width, height = pdf_height)
 print(p_linear)
 dev.off()
 

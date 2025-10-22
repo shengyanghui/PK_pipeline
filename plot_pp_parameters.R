@@ -101,41 +101,18 @@ if (length(group_vars) >= 2) {
   # Count unique values in the second grouping variable for faceting
   n_facets <- length(unique(pp_long[[group_vars[2]]]))
   
-  # Calculate optimal dimensions
-  # Base dimensions for single plot
-  base_width <- 7
-  base_height <- 6
-  
-  # Adaptive scaling based on number of facets
-  if (n_facets <= 2) {
-    # 1-2 facets: arrange horizontally
-    pdf_width <- base_width * n_facets
-    pdf_height <- base_height
-  } else if (n_facets <= 4) {
-    # 3-4 facets: 2x2 grid
-    pdf_width <- base_width * 2
-    pdf_height <- base_height * 2
-  } else if (n_facets <= 6) {
-    # 5-6 facets: 3x2 grid
-    pdf_width <- base_width * 3
-    pdf_height <- base_height * 2
-  } else if (n_facets <= 9) {
-    # 7-9 facets: 3x3 grid
-    pdf_width <- base_width * 3
-    pdf_height <- base_height * 3
-  } else {
-    # 10+ facets: 4x3 grid (maximum reasonable size)
-    pdf_width <- base_width * 4
-    pdf_height <- base_height * 3
-  }
+  # Calculate optimal dimensions using helper function
+  plot_dims <- calculate_plot_dimensions(n_facets, base_width = 4, base_height = 4)
+  pdf_width <- plot_dims$width
+  pdf_height <- plot_dims$height
   
   log_message(sprintf("Using adaptive PDF dimensions: %.1f x %.1f inches for %d facets", 
                       pdf_width, pdf_height, n_facets), "INFO")
 } else {
   # Single grouping variable - use standard dimensions
-  pdf_width <- 7
-  pdf_height <- 6
-  log_message("Using standard PDF dimensions: 7 x 6 inches (single grouping variable)", "INFO")
+  pdf_width <- 4
+  pdf_height <- 4
+  log_message("Using standard PDF dimensions: 4 x 4 inches (single grouping variable)", "INFO")
 }
 
 # Open PDF device with adaptive dimensions
