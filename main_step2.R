@@ -77,6 +77,11 @@ if (length(pp_group_vars) > 1) {
   )
 }
 
+# Write processed dataset to interim folder
+saveRDS(phx_data, 
+        file = paste0("./Interim/", config$output_prefix_pp,
+                      "_cleaned_phx_data.rds"))
+
 # Write Phoenix parameter outputs using centralized function
 write_standardized_excel(
   phx_data_list,

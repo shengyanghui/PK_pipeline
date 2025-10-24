@@ -14,6 +14,10 @@ if (!requireNamespace("fs", quietly = TRUE)) {
   stop("Package 'fs' is required for directory creation.")
 }
 
+
+# Create interim directory
+fs::dir_create("Interim")
+
 # Automatically create output directories for both steps
 fs::dir_create(paste0(config$output_dir,"Step_1"), recurse = TRUE)
 fs::dir_create(paste0(config$output_dir,"Step_2"), recurse = TRUE)
@@ -298,22 +302,6 @@ validate_config <- function(config) {
   if (!config$handle_zero %in% c("exclude", "adjust")) stop("handle_zero must be 'exclude' or 'adjust'")
   
   log_message("Configuration validation passed")
-  return(TRUE)
-}
-
-#' Initialize pipeline environment
-#' @param config Configuration list
-#' @return TRUE if successful
-initialize_pipeline <- function(config) {
-  # Validate configuration
-  validate_config(config)
-  
-  # Create output directories
-  fs::dir_create(paste0(config$output_dir,"Step_1"), recurse = TRUE)
-  fs::dir_create(paste0(config$output_dir,"Step_2"), recurse = TRUE)
-  fs::dir_create(paste0(config$output_dir,"log"), recurse = TRUE)
-  
-  log_message("Pipeline environment initialized successfully")
   return(TRUE)
 }
 
