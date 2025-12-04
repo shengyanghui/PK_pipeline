@@ -182,8 +182,8 @@ generate_PP_summary <- function(phx_data, config, lookup_table) {
   param_cols <- base::setdiff(names(phx_data), exclude_cols)
   param_cols_ordered <- param_cols[order(match(param_cols, names(phx_data)))]
   if (isTRUE(config$apply_diagnostic_criteria)) {
-    rg_affected_params <- c("Half_life", "AUC_inf_obs", "AUC_inf_obs/Dose", "Vd_obs/F", "CL_obs/F", "MRT_inf_obs", "AUMC_inf_obs")
-    ex_affected_params <- c("AUC_inf_obs", "AUC_inf_obs/Dose", "Vd_obs/F", "CL_obs/F", "MRT_inf_obs", "AUMC_inf_obs")
+    rg_affected_params <- c("Half_life", "AUC_inf_obs", "AUC_inf_obs/Dose", "Vd_obs/F", "CL_obs/F", "MRT_inf_obs", "AUMC_inf_obs", "CLss/F", "Vz/F")
+    ex_affected_params <- c("AUC_inf_obs", "AUC_inf_obs/Dose", "Vd_obs/F", "CL_obs/F", "MRT_inf_obs", "AUMC_inf_obs", "Vz/F")
     phx_data <- phx_data |>
       mutate(
         across(any_of(rg_affected_params), ~ if_else(RG == "Fail", NA_real_, .)),
@@ -201,6 +201,12 @@ generate_PP_summary <- function(phx_data, config, lookup_table) {
     )
   phx_long$Unit <- match_parameter_units(as.character(phx_long$Parameter), lookup_table)
   phx_long$Parameter <- factor(phx_long$Parameter, levels = param_cols_ordered)
+  
+  
+  # Write long dataset to Interim folder
+  saveRDS(phx_long, 
+          file = paste0("./Interim/", config$output_prefix_pp, "_phx_long.rds"))
+  
   # Use generic summary utility for summary stats
   full_summary <- summarize_stats_generic(
     phx_long,

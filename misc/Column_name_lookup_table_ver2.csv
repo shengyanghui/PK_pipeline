@@ -18,3 +18,5 @@ Cl_F_obs,CL_obs/F
 Vz_F_obs,Vd_obs/F
 Cl_F_pred,CL_pred/F
 Vz_F_pred,Vd_pred/F
+CLss_F,CLss/F
+Vz_F,Vz/F

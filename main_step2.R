@@ -18,6 +18,10 @@ phx_data <- safe_execute(
 # Extract unit lookup table from processed data
 lt <- attr(phx_data, "unit_lookup")
 
+# Write processed dataset to interim folder
+saveRDS(phx_data, 
+        file = paste0("./Interim/", config$output_prefix_pp, "_phx_data.rds"))
+
 # Generate summary statistics for Phoenix parameters
 df_pp_summary <- safe_execute(
   generate_PP_summary(phx_data, config, lookup_table = lt),
@@ -46,7 +50,7 @@ phx_data_list <- lapply(phx_data_list, function(df) {
   subject_cols <- setdiff(names(df), c(get_pp_group_vars(config, df), "Parameter", "Unit"))
   # Apply rounding only to rows where Parameter is not in non_numeric_params
   df[subject_cols] <- t(apply(df, 1, function(row) {
-    if (row["Parameter"] %in% c(non_numeric_params, "Tmax")) {
+    if (row["Parameter"] %in% c(non_numeric_params, "Tmax", "Tlast", "Tmin")) {
       row[subject_cols]
     } else {
       suppressWarnings(as.character(phx_rounding_fn(as.numeric(row[subject_cols]), phx_digits)))
@@ -76,11 +80,6 @@ if (length(pp_group_vars) > 1) {
     }
   )
 }
-
-# Write processed dataset to interim folder
-saveRDS(phx_data, 
-        file = paste0("./Interim/", config$output_prefix_pp,
-                      "_cleaned_phx_data.rds"))
 
 # Write Phoenix parameter outputs using centralized function
 write_standardized_excel(
